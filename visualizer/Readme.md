@@ -2,62 +2,35 @@
 
 ## Prerequisites
 
-- JDK 11 is the recommended Java runtime platform for IGV.
-
-## Settings
-
-- During IGV first run, you will be prompted to download and install JavaScript dependencies for IGV's Scripting shell.
- - Without JavaScript modules the Scripting shell will have less fetures (highlighting will be missing among other features).
-- It is recomended to run IGV on GraalVM.
- - To run with GraalVM use flag `--jdkhome <path>` or setup your `PATH` environment variable to point to GraalVM installation directory.
-  - This will enable the use of Scripting shell with GraalVM scripting languages.
+- JDK 21 is the recommended Java runtime platform for IGV, but any release between 17 and 22 is
+  supported by the NetBeans 22 platform.
 
 ## Building and testing IGV
 
 ### MX
 
-IGV is an MX project and should be builded and tested as such.
-Please download MX to be able to build and test IGV.
+IGV is an MX project and for convenience should be built and tested as such.  It's also a NetBeans
+22 project based on Maven so it can be developed using any tool chain which supports Maven.
+Certains kind of edits, like editing the NetBeans module exlusions or editing the special UI
+components, will require using NetBeans.
+
+There is a known issue with opening the Maven based project in NetBeans because of a bug with the
+`mx` project support built into NetBeans itself.`  Because 
 
 #### Building
 
 To build run the command:
 `mx build`
 
-This will:
-- clone other needed missing repositories:
- - graal
- - graaljs
-- download NB platform the proper internal or external server
-- build relevant parts of graal for IGV.
-- build IGV.
-
-The resulting build is a development build with a version number of `dev`.  This means that
-preferences are stored in a different location which is helpful so that development doesn't mess
-with your regular preferences.  Use `mx build-release` to build a release version.
-
 #### Testing
-
-To check for possible checkstyle or gate issues and run spotbugs run command:
-`mx gate`
 
 To do the unittests included in IGV run command:
 `mx unittest`
 
 ### Important files
 
- - `IdealGraphVisualizer/nbproject/project.properties`
-  - version number specification
-   - `app.version`
-  - run and debug arguments
-   - `run.args.extra`
-   - `debug.args.extra`
- - `IdealGraphVisualizer/nbproject/platform.properties`
-  - platform disabled modules
-   - `disabled.modules`
-  - platform download url and expected name
-   - `ide.dist.url`
-   - `platform.dist.number.regexp`
+ - `IdealGraphVisualizer/pom.xml` contains a `properties` section for values which affect the build
+  - the base NetBeans platform version is `netbeans.version`
 
 ## Running IGV
 

@@ -20,7 +20,7 @@
     timelimit : "30:00",
     targets: [ "gate" ],
     downloads+: {
-      "VISUALIZER_JAVA_HOME": common.jdks_data["oraclejdk17"]
+      "TOOLS_JAVA_HOME": common.jdks_data["oraclejdk21"]
     },
     run: [
       ["cd", "./visualizer"],
@@ -41,7 +41,7 @@
 
   local _builds = [
     common.linux_amd64 + self.linux_maven + common.oraclejdk17 + self.Gate + { name: "gate-visualizer-linux-amd64-oraclejdk-17" },
-    common.linux_amd64 + self.linux_maven + common.labsjdkLatestCE + self.Integration + { name: "gate-visualizer-integration-linux-amd64-oraclejdk-17" },
+    common.linux_amd64 + self.linux_maven + common.labsjdkLatestCE + self.Integration + { name: "gate-visualizer-integration-linux-amd64-labsjdk-latest" },
   ],
 
   builds: utils.add_defined_in(_builds, std.thisFile),
