@@ -53,7 +53,7 @@ env:
   PYTHON_VERSION: 3.12.3
 
 jobs:
-  get-metadata:
+  build-graalvm-and-populate-matrix:
     name: Populate matrix
     runs-on: ubuntu-latest
     if: (github.repository=='oracle/graal')
@@ -62,6 +62,20 @@ jobs:
     steps:
     - name: Checkout oracle/graal
       uses: actions/checkout@v4
+    - name: Build GraalVM JDK
+      uses: ./.github/actions/build-graalvm
+      with:
+        native-images: 'native-image,native-image-configure,lib:native-image-agent'
+        components: 'Native Image,Native Image Configure Tool'
+        java-version: ${{ env.JAVA_VERSION }}
+    - name: Tar GraalVM JDK
+      shell: bash
+      run: tar -czvhf graalvm.tgz -C $(dirname ${GRAALVM_HOME}) $(basename ${GRAALVM_HOME})
+    - name: Persist GraalVM JDK build
+      uses: actions/upload-artifact@v4
+      with:
+        name: graalvm
+        path: graalvm.tgz
     - name: Setup python
       uses: actions/setup-python@v4
       with:
@@ -76,11 +90,11 @@ jobs:
     env:
       GRAALVM_HOME: ${{ github.workspace }}/graalvm
     timeout-minutes: 20
-    needs: get-metadata
+    needs:  build-graalvm-and-populate-matrix
     strategy:
       fail-fast: false
       matrix: 
-        coordinates: ${{ fromJson(needs.get-metadata.outputs.matrix).coordinates}}
+        coordinates: ${{ fromJson(needs. build-graalvm-and-populate-matrix.outputs.matrix).coordinates}}
     steps:
       - name: Checkout oracle/graal
         uses: actions/checkout@v4
