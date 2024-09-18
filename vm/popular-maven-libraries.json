@@ -1,0 +1,110 @@
+[
+    {
+        "group_id": "org.slf4j",
+        "artifact_id": "slf4j-api",
+        "version": "2.0.16",
+        "rank": 2
+    },
+    {
+        "group_id": "org.jetbrains.kotlin",
+        "artifact_id": "kotlin-stdlib",
+        "version": "2.0.20",
+        "rank": 3
+    },
+    {
+        "group_id": "com.google.guava",
+        "artifact_id": "guava",
+        "version": "33.3.0-jre",
+        "rank": 5
+    },
+    {
+        "group_id": "org.jetbrains.kotlin",
+        "artifact_id": "kotlin-stdlib-jdk8",
+        "version": "2.0.20",
+        "rank": 7
+    },
+    {
+        "group_id": "org.mockito",
+        "artifact_id": "mockito-core",
+        "version": "5.13.0",
+        "rank": 8
+    },
+    {
+        "group_id": "com.fasterxml.jackson.core",
+        "artifact_id": "jackson-databind",
+        "version": "2.17.2",
+        "rank": 9
+    },
+    {
+        "group_id": "org.apache.commons",
+        "artifact_id": "commons-lang3",
+        "version": "3.17.0",
+        "rank": 10
+    },
+    {
+        "group_id": "commons-io",
+        "artifact_id": "commons-io",
+        "version": "2.16.1",
+        "rank": 11
+    },
+    {
+        "group_id": "ch.qos.logback",
+        "artifact_id": "logback-classic",
+        "version": "1.5.8",
+        "rank": 12
+    },
+    {
+        "group_id": "org.projectlombok",
+        "artifact_id": "lombok",
+        "version": "1.18.34",
+        "rank": 13
+    },
+    {
+        "group_id": "com.google.code.gson",
+        "artifact_id": "gson",
+        "version": "2.11.0",
+        "rank": 14
+    },
+    {
+        "group_id": "org.clojure",
+        "artifact_id": "clojure",
+        "version": "1.12.0",
+        "rank": 17
+    },
+    {
+        "group_id": "org.scalatest",
+        "artifact_id": "scalatest_3",
+        "version": "3.2.19",
+        "rank": 19
+    },
+    {
+        "group_id": "org.assertj",
+        "artifact_id": "assertj-core",
+        "version": "3.26.3",
+        "rank": 20
+    },
+    {
+        "group_id": "org.junit.jupiter",
+        "artifact_id": "junit-jupiter-api",
+        "version": "5.11.0",
+        "rank": 22
+    },
+    {
+        "group_id": "org.junit.jupiter",
+        "artifact_id": "junit-jupiter-engine",
+        "version": "5.11.0",
+        "rank": 23
+    },
+    {
+        "group_id": "org.slf4j",
+        "artifact_id": "slf4j-simple",
+        "version": "2.0.16",
+        "rank": 24
+    },
+    {
+        "group_id": "com.fasterxml.jackson.core",
+        "artifact_id": "jackson-core",
+        "version": "2.17.2",
+        "rank": 25
+    }
+]
