@@ -16,7 +16,8 @@ def generate_matrix(path_to_data):
             if excluded_lib['group_id'] == lib['group_id'] and excluded_lib['artifact_id'] == lib['artifact_id']:
                 skip = True
                 break
-        if not skip:
+        #if not skip:
+        if True: # Faulty on purpose
             matrix['coordinates'].append(f'{lib['group_id']}:{lib['artifact_id']}:{lib['version']}')
         
     print(f"::set-output name=matrix::{json.dumps(matrix)}")
