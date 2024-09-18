@@ -48,7 +48,7 @@ on:
       - 'jvukicev/GR-57251'
 
 env:
-  LIBRARY_METADATA_PATH: ${{github.workspace}}/graal/vm
+  LIBRARY_METADATA_PATH: ${{github.workspace}}/vm
   JAVA_VERSION: 21
   PYTHON_VERSION: 3.12.3
 
