@@ -82,6 +82,8 @@ jobs:
       matrix: 
         coordinates: ${{ fromJson(needs.get-metadata.outputs.matrix).coordinates}}
     steps:
+      - name: Checkout oracle/graal
+        uses: actions/checkout@v4
       - name: Download GraalVM JDK build
         uses: actions/download-artifact@v4
         with:
