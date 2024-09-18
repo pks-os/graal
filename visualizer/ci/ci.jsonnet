@@ -23,13 +23,12 @@
       "TOOLS_JAVA_HOME": common.jdks_data["oraclejdk21"]
     },
     run: [
-      ["cd", "./visualizer"],
-      ["mx", "--java-home=$VISUALIZER_JAVA_HOME", "build" ],
-      ["cd", "../compiler"],
+      ["cd", "./compiler"],
       ["mx", "build" ],
       ["mx", "benchmark", "dacapo:fop", "--", "-Djdk.graal.Dump=:1", "-Djdk.graal.PrintGraph=File", "-Djdk.graal.DumpPath=../IGV_Dumps"],
       ["cd", "../visualizer"],
-      ["mx", "igv", "-J-Digv.openfile.onstartup.and.close=../compiler/IGV_Dumps", "--nosplash"],
+      ["mx", "--java-home=$TOOLS_JAVA_HOME", "build" ],
+      ["mx", "--java-home=$TOOLS_JAVA_HOME", "igv", "-J-Digv.openfile.onstartup.and.close=../compiler/IGV_Dumps", "--nosplash"],
     ]
   },
 
