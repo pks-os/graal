@@ -54,7 +54,7 @@ env:
 
 jobs:
   build-graalvm-and-populate-matrix:
-    name: Populate matrix
+    name: Build GraalVM and populate matrix
     runs-on: ubuntu-latest
     if: (github.repository=='oracle/graal')
     outputs:
