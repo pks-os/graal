@@ -25,6 +25,7 @@
 package com.oracle.svm.core;
 
 import static com.oracle.svm.core.option.RuntimeOptionKey.RuntimeOptionKeyFlag.Immutable;
+import static com.oracle.svm.core.option.RuntimeOptionKey.RuntimeOptionKeyFlag.IsolateCreationOnly;
 import static com.oracle.svm.core.option.RuntimeOptionKey.RuntimeOptionKeyFlag.RelevantForCompilationIsolates;
 import static jdk.graal.compiler.core.common.SpectrePHTMitigations.None;
 import static jdk.graal.compiler.core.common.SpectrePHTMitigations.Options.SpectrePHTBarriers;
@@ -942,12 +943,8 @@ public class SubstrateOptions {
     public static final HostedOptionKey<Integer> GenerateDebugInfo = new HostedOptionKey<>(0, SubstrateOptions::validateGenerateDebugInfo) {
         @Override
         protected void onValueUpdate(EconomicMap<OptionKey<?>, Object> values, Integer oldValue, Integer newValue) {
-            if (!OS.DARWIN.isCurrent()) {
-                /*
-                 * Keep the symbol table, as it may be used by debugging or profiling tools (e.g.,
-                 * perf). On Windows, the symbol table is included in the pdb-file, while on Linux,
-                 * it is part of the .debug file.
-                 */
+            if (OS.WINDOWS.isCurrent()) {
+                /* Keep symbols on Windows. The symbol table is part of the pdb-file. */
                 DeleteLocalSymbols.update(values, newValue == 0);
             }
         }
@@ -1053,11 +1050,11 @@ public class SubstrateOptions {
 
         /** Use {@link ReferenceHandler#isExecutedManually()} instead. */
         @Option(help = "Determines if the reference handling is executed automatically or manually.", type = OptionType.Expert) //
-        public static final RuntimeOptionKey<Boolean> AutomaticReferenceHandling = new RuntimeOptionKey<>(true, Immutable);
+        public static final RuntimeOptionKey<Boolean> AutomaticReferenceHandling = new RuntimeOptionKey<>(true, IsolateCreationOnly);
 
         /** Use {@link com.oracle.svm.core.jvmstat.PerfManager#usePerfData()} instead. */
         @Option(help = "Flag to disable jvmstat instrumentation for performance testing.")//
-        public static final RuntimeOptionKey<Boolean> UsePerfData = new RuntimeOptionKey<>(true, Immutable);
+        public static final RuntimeOptionKey<Boolean> UsePerfData = new RuntimeOptionKey<>(true, IsolateCreationOnly);
 
         /** Use {@link SubstrateOptions#maxJavaStackTraceDepth()} instead. */
         @Option(help = "The maximum number of lines in the stack trace for Java exceptions (0 means all)", type = OptionType.User)//
@@ -1079,7 +1076,7 @@ public class SubstrateOptions {
         protected static final HostedOptionKey<Boolean> InstallExitHandlers = new HostedOptionKey<>(false);
 
         @Option(help = "Physical memory size (in bytes). By default, the value is queried from the OS/container during VM startup.", type = OptionType.Expert)//
-        public static final RuntimeOptionKey<Long> MaxRAM = new RuntimeOptionKey<>(0L, Immutable);
+        public static final RuntimeOptionKey<Long> MaxRAM = new RuntimeOptionKey<>(0L, IsolateCreationOnly);
     }
 
     @Fold
@@ -1088,7 +1085,7 @@ public class SubstrateOptions {
     }
 
     @Option(help = "Overwrites the available number of processors provided by the OS. Any value <= 0 means using the processor count from the OS.")//
-    public static final RuntimeOptionKey<Integer> ActiveProcessorCount = new RuntimeOptionKey<>(-1, Immutable, RelevantForCompilationIsolates);
+    public static final RuntimeOptionKey<Integer> ActiveProcessorCount = new RuntimeOptionKey<>(-1, IsolateCreationOnly, RelevantForCompilationIsolates);
 
     @Option(help = "For internal purposes only. Disables type id result verification even when running with assertions enabled.", stability = OptionStability.EXPERIMENTAL, type = OptionType.Debug)//
     public static final HostedOptionKey<Boolean> DisableTypeIdResultVerification = new HostedOptionKey<>(true);
