@@ -22,25 +22,12 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package com.oracle.graal.pointsto.heap;
+package com.oracle.svm.truffle;
 
-import com.oracle.graal.pointsto.heap.SharedLayerSnapshotCapnProtoSchemaHolder.PersistedAnalysisMethod;
-import com.oracle.graal.pointsto.heap.SharedLayerSnapshotCapnProtoSchemaHolder.PersistedAnalysisType;
-
-public class ImageLayerLoaderHelper {
-    protected ImageLayerLoader imageLayerLoader;
-
-    public ImageLayerLoaderHelper(ImageLayerLoader imageLayerLoader) {
-        this.imageLayerLoader = imageLayerLoader;
-    }
-
-    @SuppressWarnings("unused")
-    protected boolean loadType(PersistedAnalysisType.Reader typeData, int tid) {
-        return false;
-    }
-
-    @SuppressWarnings("unused")
-    protected boolean loadMethod(PersistedAnalysisMethod.Reader methodData, int mid) {
-        return false;
-    }
+/**
+ * When this class is reachable for native image, the resources of the module
+ * <code>org.graalvm.shadowed.jcodings</code> are included in the image in case the module is on
+ * module path or class path and {@link TruffleBaseFeature} is enabled.
+ */
+public class NeedsAllEncodings {
 }
