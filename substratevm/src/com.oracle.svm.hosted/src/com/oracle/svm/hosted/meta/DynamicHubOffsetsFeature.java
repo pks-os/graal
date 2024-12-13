@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,26 +22,26 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package com.oracle.graal.pointsto.flow;
+package com.oracle.svm.hosted.meta;
 
-import com.oracle.graal.pointsto.PointsToAnalysis;
-import com.oracle.graal.pointsto.meta.AnalysisType;
-import com.oracle.graal.pointsto.typestate.TypeState;
+import org.graalvm.nativeimage.ImageSingletons;
 
-import jdk.vm.ci.code.BytecodePosition;
+import com.oracle.svm.core.feature.AutomaticallyRegisteredFeature;
+import com.oracle.svm.core.feature.InternalFeature;
+import com.oracle.svm.core.graal.meta.DynamicHubOffsets;
+import com.oracle.svm.core.layeredimagesingleton.FeatureSingleton;
+import com.oracle.svm.hosted.FeatureImpl;
 
-public class ConstantPrimitiveSourceTypeFlow extends TypeFlow<BytecodePosition> implements PrimitiveFlow {
+@AutomaticallyRegisteredFeature
+public final class DynamicHubOffsetsFeature implements InternalFeature, FeatureSingleton {
 
-    public ConstantPrimitiveSourceTypeFlow(BytecodePosition source, AnalysisType type, TypeState state) {
-        super(source, type, state);
-    }
-
-    public ConstantPrimitiveSourceTypeFlow(ConstantPrimitiveSourceTypeFlow original, MethodFlowsGraph methodFlows) {
-        super(original, methodFlows, original.getRawState());
+    @Override
+    public void afterRegistration(AfterRegistrationAccess access) {
+        ImageSingletons.add(DynamicHubOffsets.class, new DynamicHubOffsets());
     }
 
     @Override
-    public TypeFlow<BytecodePosition> copy(PointsToAnalysis bb, MethodFlowsGraph methodFlows) {
-        return new ConstantPrimitiveSourceTypeFlow(this, methodFlows);
+    public void beforeCompilation(BeforeCompilationAccess a) {
+        DynamicHubOffsets.singleton().initializeOffsets(((FeatureImpl.BeforeCompilationAccessImpl) a).getMetaAccess());
     }
 }

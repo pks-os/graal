@@ -24,9 +24,7 @@
  */
 package com.oracle.svm.hosted;
 
-import java.lang.ref.PhantomReference;
 import java.lang.ref.Reference;
-import java.lang.ref.SoftReference;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -258,11 +256,14 @@ public class SVMHost extends HostVM {
 
     /**
      * If we are skipping the analysis of a prior layer method, we must ensure analysis was
-     * performed in the prior layer and the analysis results have been serialized. Currently this
+     * performed in the prior layer and the analysis results have been serialized. Currently, this
      * approximates to either:
      * <ol>
-     * <li>We have an analyzed graph available. See {@link ImageLayerLoader#hasAnalysisParsedGraph}
-     * for which analysis graphs are persisted.</li>
+     * <li>We have a strengthened graph available. See {@link ImageLayerLoader#hasStrengthenedGraph}
+     * for which strengthened graphs are persisted. Having an analysis parsed graph (see
+     * {@link ImageLayerLoader#hasAnalysisParsedGraph}) is not enough because methods with only an
+     * analysis parsed graph are inlined before analysis, but not analyzed. Additionally, having a
+     * strengthened graph implies also having an analysis parsed graph.</li>
      * <li>A compile target exists this layer can call.</li>
      * </ol>
      *
@@ -271,7 +272,7 @@ public class SVMHost extends HostVM {
     @Override
     public boolean analyzedInPriorLayer(AnalysisMethod method) {
         ImageLayerLoader imageLayerLoader = HostedImageLayerBuildingSupport.singleton().getLoader();
-        return imageLayerLoader.hasAnalysisParsedGraph(method) || HostedDynamicLayerInfo.singleton().compiledInPriorLayer(method);
+        return imageLayerLoader.hasStrengthenedGraph(method) || HostedDynamicLayerInfo.singleton().compiledInPriorLayer(method);
     }
 
     protected InlineBeforeAnalysisPolicyUtils getInlineBeforeAnalysisPolicyUtils() {
@@ -527,9 +528,13 @@ public class SVMHost extends HostVM {
          */
         boolean isProxyClass = Proxy.isProxyClass(javaClass);
 
-        return new DynamicHub(javaClass, className, computeHubType(type), computeReferenceType(type), superHub, componentHub, sourceFileName, modifiers, hubClassLoader,
-                        isHidden, isRecord, nestHost, assertionStatus, type.hasDefaultMethods(), type.declaresDefaultMethods(), isSealed, isVMInternal, isLambdaFormHidden, isLinked, simpleBinaryName,
-                        getDeclaringClass(javaClass), getSignature(javaClass), isProxyClass, layerId);
+        short flags = DynamicHub.makeFlags(javaClass.isPrimitive(), javaClass.isInterface(), isHidden, isRecord, assertionStatus,
+                        type.hasDefaultMethods(), type.declaresDefaultMethods(), isSealed, isVMInternal,
+                        isLambdaFormHidden, isLinked, isProxyClass);
+
+        return new DynamicHub(javaClass, className, computeHubType(type), ReferenceType.computeReferenceType(javaClass),
+                        superHub, componentHub, sourceFileName, modifiers, flags, hubClassLoader, nestHost,
+                        simpleBinaryName, getDeclaringClass(javaClass), getSignature(javaClass), layerId);
     }
 
     private static final Method getSignature = ReflectionUtil.lookupMethod(Class.class, "getGenericSignature0");
@@ -619,21 +624,6 @@ public class SVMHost extends HostVM {
             return HubType.INSTANCE;
         }
         return HubType.OTHER;
-    }
-
-    private static ReferenceType computeReferenceType(AnalysisType type) {
-        Class<?> clazz = type.getJavaClass();
-        if (Reference.class.isAssignableFrom(clazz)) {
-            if (PhantomReference.class.isAssignableFrom(clazz)) {
-                return ReferenceType.Phantom;
-            } else if (SoftReference.class.isAssignableFrom(clazz)) {
-                return ReferenceType.Soft;
-            } else {
-                /* Treat all other java.lang.Reference subclasses as weak references. */
-                return ReferenceType.Weak;
-            }
-        }
-        return ReferenceType.None;
     }
 
     @Override

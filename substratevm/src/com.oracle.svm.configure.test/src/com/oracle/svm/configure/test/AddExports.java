@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,26 +22,23 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package com.oracle.graal.pointsto.flow;
+package com.oracle.svm.configure.test;
 
-import com.oracle.graal.pointsto.PointsToAnalysis;
-import com.oracle.graal.pointsto.meta.AnalysisType;
-import com.oracle.graal.pointsto.typestate.TypeState;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-import jdk.vm.ci.code.BytecodePosition;
-
-public class ConstantPrimitiveSourceTypeFlow extends TypeFlow<BytecodePosition> implements PrimitiveFlow {
-
-    public ConstantPrimitiveSourceTypeFlow(BytecodePosition source, AnalysisType type, TypeState state) {
-        super(source, type, state);
-    }
-
-    public ConstantPrimitiveSourceTypeFlow(ConstantPrimitiveSourceTypeFlow original, MethodFlowsGraph methodFlows) {
-        super(original, methodFlows, original.getRawState());
-    }
-
-    @Override
-    public TypeFlow<BytecodePosition> copy(PointsToAnalysis bb, MethodFlowsGraph methodFlows) {
-        return new ConstantPrimitiveSourceTypeFlow(this, methodFlows);
-    }
+/**
+ * Specifies packages concealed in JDK modules used by a test. The mx unit test runner will ensure
+ * the packages are exported to the module containing annotated test class.
+ */
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.TYPE)
+public @interface AddExports {
+    /**
+     * The qualified name of the concealed package in {@code <module>/<package>} format (e.g.,
+     * "jdk.internal.vm.ci/jdk.vm.ci.code").
+     */
+    String[] value() default "";
 }
