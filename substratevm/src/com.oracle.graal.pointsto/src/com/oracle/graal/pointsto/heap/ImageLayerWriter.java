@@ -81,6 +81,8 @@ import com.oracle.graal.pointsto.heap.SharedLayerSnapshotCapnProtoSchemaHolder.P
 import com.oracle.graal.pointsto.heap.SharedLayerSnapshotCapnProtoSchemaHolder.PersistedConstant;
 import com.oracle.graal.pointsto.heap.SharedLayerSnapshotCapnProtoSchemaHolder.PersistedConstant.Object.Relinking.EnumConstant;
 import com.oracle.graal.pointsto.heap.SharedLayerSnapshotCapnProtoSchemaHolder.PersistedConstant.Object.Relinking.StringConstant;
+import com.oracle.graal.pointsto.heap.SharedLayerSnapshotCapnProtoSchemaHolder.PrimitiveArray;
+import com.oracle.graal.pointsto.heap.SharedLayerSnapshotCapnProtoSchemaHolder.PrimitiveValue;
 import com.oracle.graal.pointsto.heap.SharedLayerSnapshotCapnProtoSchemaHolder.SharedLayerSnapshot;
 import com.oracle.graal.pointsto.infrastructure.OriginalFieldProvider;
 import com.oracle.graal.pointsto.meta.AnalysisField;
@@ -97,6 +99,7 @@ import jdk.graal.compiler.java.LambdaUtils;
 import jdk.graal.compiler.nodes.EncodedGraph;
 import jdk.graal.compiler.nodes.spi.IdentityHashCodeProvider;
 import jdk.graal.compiler.util.ObjectCopier;
+import jdk.vm.ci.meta.ConstantReflectionProvider;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.MethodHandleAccessProvider.IntrinsicMethod;
@@ -151,6 +154,7 @@ public class ImageLayerWriter {
     public void ensureConstantPersisted(ImageHeapConstant constant) {
         assert !sealed;
         constantsToPersist.add(constant);
+        afterConstantAdded(constant);
     }
 
     protected record ConstantParent(int constantId, int index) {
@@ -377,6 +381,8 @@ public class ImageLayerWriter {
              * created. If the enclosing type is missing, it is ignored for now. This try/catch
              * block could be removed after the trackAcrossLayers is fully implemented.
              */
+        } catch (InternalError | TypeNotPresentException | LinkageError e) {
+            /* Ignore missing type errors. */
         }
         if (type.isArray()) {
             builder.setComponentTypeId(type.getComponentType().getId());
@@ -429,6 +435,16 @@ public class ImageLayerWriter {
     protected void afterMethodAdded(AnalysisMethod method) {
         ensureTypePersisted(method.getSignature().getReturnType());
         imageLayerWriterHelper.afterMethodAdded(method);
+    }
+
+    private void afterConstantAdded(ImageHeapConstant constant) {
+        ensureTypePersisted(constant.getType());
+        /* If this is a Class constant persist the corresponding type. */
+        ConstantReflectionProvider constantReflection = aUniverse.getBigbang().getConstantReflectionProvider();
+        AnalysisType typeFromClassConstant = (AnalysisType) constantReflection.asJavaType(constant);
+        if (typeFromClassConstant != null) {
+            ensureTypePersisted(typeFromClassConstant);
+        }
     }
 
     private void scanConstantReferencedObjects(ImageHeapConstant constant, Collection<ImageHeapConstant> discoveredConstants) {
@@ -699,7 +715,7 @@ public class ImageLayerWriter {
         }
     }
 
-    private static void persistConstantPrimitiveArray(PersistedConstant.PrimitiveData.Builder builder, JavaKind componentKind, Object array) {
+    protected static void persistConstantPrimitiveArray(PrimitiveArray.Builder builder, JavaKind componentKind, Object array) {
         assert componentKind.toJavaClass().equals(array.getClass().getComponentType());
         switch (array) {
             case boolean[] a -> persistArray(a, builder::initZ, (b, i) -> b.set(i, a[i]));
@@ -737,7 +753,7 @@ public class ImageLayerWriter {
                 } else if (object == JavaConstant.NULL_POINTER) {
                     b.setNullPointer(Void.VOID);
                 } else if (object instanceof PrimitiveConstant pc) {
-                    ConstantReference.PrimitiveValue.Builder pb = b.initPrimitiveValue();
+                    PrimitiveValue.Builder pb = b.initPrimitiveValue();
                     pb.setTypeChar(NumUtil.safeToUByte(pc.getJavaKind().getTypeChar()));
                     pb.setRawValue(pc.getRawValue());
                 } else {
