@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -20,29 +20,18 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package com.oracle.truffle.espresso.impl;
 
-import java.util.concurrent.locks.ReadWriteLock;
+package com.oracle.truffle.espresso.shared.meta;
 
 import com.oracle.truffle.espresso.classfile.descriptors.Symbol;
 import com.oracle.truffle.espresso.classfile.descriptors.Symbol.Name;
-import com.oracle.truffle.espresso.classfile.tables.AbstractPackageTable;
-import com.oracle.truffle.espresso.impl.ModuleTable.ModuleEntry;
-import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 
-public final class PackageTable extends AbstractPackageTable<StaticObject, PackageTable.PackageEntry, ModuleEntry> {
-    public PackageTable(ReadWriteLock lock) {
-        super(lock);
-    }
-
-    @Override
-    protected PackageEntry createEntry(Symbol<Name> name, ModuleEntry data) {
-        return new PackageEntry(name, data);
-    }
-
-    public static final class PackageEntry extends AbstractPackageTable.AbstractPackageEntry<StaticObject, ModuleEntry> {
-        public PackageEntry(Symbol<Name> name, ModuleEntry module) {
-            super(name, module);
-        }
-    }
+/**
+ * A {@link Named} object must provide a {@link #getSymbolicName() symbolic name}.
+ */
+public interface Named {
+    /**
+     * @return The symbolic name of this object.
+     */
+    Symbol<Name> getSymbolicName();
 }

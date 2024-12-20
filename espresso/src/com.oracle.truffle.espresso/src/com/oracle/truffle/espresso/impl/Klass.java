@@ -82,7 +82,6 @@ import com.oracle.truffle.espresso.meta.EspressoError;
 import com.oracle.truffle.espresso.meta.InteropKlassesDispatch;
 import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.meta.MetaUtil;
-import com.oracle.truffle.espresso.meta.ModifiersProvider;
 import com.oracle.truffle.espresso.nodes.interop.LookupDeclaredMethod;
 import com.oracle.truffle.espresso.nodes.interop.LookupDeclaredMethodNodeGen;
 import com.oracle.truffle.espresso.nodes.interop.LookupFieldNode;
@@ -102,12 +101,13 @@ import com.oracle.truffle.espresso.runtime.dispatch.staticobject.EspressoInterop
 import com.oracle.truffle.espresso.runtime.dispatch.staticobject.InteropLookupAndInvoke;
 import com.oracle.truffle.espresso.runtime.dispatch.staticobject.InteropLookupAndInvokeFactory;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
+import com.oracle.truffle.espresso.shared.meta.TypeAccess;
 import com.oracle.truffle.espresso.substitutions.JavaType;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 import com.oracle.truffle.espresso.vm.VM;
 
 @ExportLibrary(InteropLibrary.class)
-public abstract class Klass extends ContextAccessImpl implements ModifiersProvider, KlassRef, TruffleObject, EspressoType {
+public abstract class Klass extends ContextAccessImpl implements KlassRef, TruffleObject, EspressoType, TypeAccess<Klass, Method, Field> {
 
     // region Interop
 
@@ -816,16 +816,8 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
         if (moduleFrom == moduleTo) {
             return true;
         }
-        /*
-         * Acceptable access to a type in an unnamed module. Note that since unnamed modules can
-         * read all unnamed modules, this also handles the case where module_from is also unnamed
-         * but in a different class loader.
-         */
-        if (!moduleTo.isNamed() && (moduleFrom.canReadAllUnnamed() || moduleFrom.canRead(moduleTo, context))) {
-            return true;
-        }
         // Establish readability, check if moduleFrom is allowed to read moduleTo.
-        if (!moduleFrom.canRead(moduleTo, context)) {
+        if (!moduleFrom.canRead(moduleTo, context.isJavaBase(moduleTo))) {
             return false;
         }
         // Access is allowed if moduleTo is open, i.e. all its packages are unqualifiedly
@@ -894,7 +886,7 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
     public final boolean isInterface() {
         // conflict between ModifiersProvider and KlassRef interfaces,
         // so chose the default implementation in ModifiersProvider.
-        return ModifiersProvider.super.isInterface();
+        return TypeAccess.super.isInterface();
     }
 
     /**
@@ -1065,7 +1057,7 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
          * never overriden default interface methods. We cirumvent this CHA limitation here by using
          * an invokespecial, which is inlinable.
          */
-        return ModifiersProvider.super.isFinalFlagSet() /* || isLeafAssumption() */;
+        return TypeAccess.super.isFinalFlagSet() /* || isLeafAssumption() */;
     }
 
     /**
@@ -1681,6 +1673,11 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
         return name;
     }
 
+    @Override
+    public Symbol<Name> getSymbolicName() {
+        return getName();
+    }
+
     public String getExternalName() {
         // Conversion from internal form.
         String externalName = MetaUtil.internalNameToJava(type.toString(), true, true);
@@ -1800,11 +1797,6 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
     }
 
     @Override
-    public KlassRef getSuperClass() {
-        return getSuperKlass();
-    }
-
-    @Override
     public byte getTagConstant() {
         return TagConstants.toTagConstant(getJavaKind());
     }
@@ -1881,4 +1873,31 @@ public abstract class Klass extends ContextAccessImpl implements ModifiersProvid
     }
 
     // endregion jdwp-specific
+
+    // region TypeAccess impl
+
+    @Override
+    public String getJavaName() {
+        return getExternalName();
+    }
+
+    @Override
+    public Klass getSuperClass() {
+        return getSuperKlass();
+    }
+
+    @Override
+    public Method lookupInterfaceMethod(Symbol<Name> methodName, Symbol<Signature> methodSignature) {
+        if (this instanceof ObjectKlass) {
+            return ((ObjectKlass) this).resolveInterfaceMethod(methodName, methodSignature);
+        }
+        return null;
+    }
+
+    @Override
+    public Method lookupInstanceMethod(Symbol<Name> methodName, Symbol<Signature> methodSignature) {
+        return lookupMethod(methodName, methodSignature, LookupMode.INSTANCE_ONLY);
+    }
+
+    // endregion TypeAccess impl
 }
