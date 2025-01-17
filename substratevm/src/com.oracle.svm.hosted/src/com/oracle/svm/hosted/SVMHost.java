@@ -87,6 +87,7 @@ import com.oracle.svm.core.heap.StoredContinuation;
 import com.oracle.svm.core.heap.Target_java_lang_ref_Reference;
 import com.oracle.svm.core.heap.UnknownClass;
 import com.oracle.svm.core.hub.DynamicHub;
+import com.oracle.svm.core.hub.DynamicHubCompanion;
 import com.oracle.svm.core.hub.HubType;
 import com.oracle.svm.core.hub.Hybrid;
 import com.oracle.svm.core.hub.PredefinedClassesSupport;
@@ -409,7 +410,7 @@ public class SVMHost extends HostVM {
         if (optionAllowUnsafeAllocationOfAllInstantiatedTypes != null) {
             if (optionAllowUnsafeAllocationOfAllInstantiatedTypes) {
                 type.registerAsUnsafeAllocated("All types are registered as Unsafe allocated via option -H:+AllowUnsafeAllocationOfAllInstantiatedTypes");
-                typeToHub.get(type).getCompanion().setUnsafeAllocate();
+                typeToHub.get(type).setCanUnsafeAllocate();
             } else {
                 /*
                  * No default registration for unsafe allocation, setting the explicit option has
@@ -418,7 +419,7 @@ public class SVMHost extends HostVM {
             }
         } else if (!missingRegistrationSupport.reportMissingRegistrationErrors(type.getJavaClass())) {
             type.registerAsUnsafeAllocated("Type is not listed as ThrowMissingRegistrationError and therefore registered as Unsafe allocated automatically for compatibility reasons");
-            typeToHub.get(type).getCompanion().setUnsafeAllocate();
+            typeToHub.get(type).setCanUnsafeAllocate();
         }
     }
 
@@ -647,12 +648,20 @@ public class SVMHost extends HostVM {
             throw new UnsupportedFeatureException(message);
         }
         if (originalClass.isRecord()) {
-            for (var recordComponent : originalClass.getRecordComponents()) {
-                if (WordBase.class.isAssignableFrom(recordComponent.getType())) {
-                    throw UserError.abort("Records cannot use Word types. " +
-                                    "The equals/hashCode/toString implementation of records uses method handles, and Word types are not supported as parameters of method handle invocations. " +
-                                    "Record type: `" + originalClass.getTypeName() + "`, component: `" + recordComponent.getName() + "` of type `" + recordComponent.getType().getTypeName() + "`");
+            try {
+                for (var recordComponent : originalClass.getRecordComponents()) {
+                    if (WordBase.class.isAssignableFrom(recordComponent.getType())) {
+                        throw UserError.abort("Records cannot use Word types. " +
+                                        "The equals/hashCode/toString implementation of records uses method handles, and Word types are not supported as parameters of method handle invocations. " +
+                                        "Record type: `" + originalClass.getTypeName() + "`, component: `" + recordComponent.getName() + "` of type `" + recordComponent.getType().getTypeName() + "`");
+                    }
                 }
+            } catch (LinkageError e) {
+                /*
+                 * If a record refers to a missing/incomplete type then Class.getRecordComponents()
+                 * will throw a LinkageError. It's safe to ignore this here since the Word type
+                 * restriction applies to VM classes which should be fully defined.
+                 */
             }
         }
     }
@@ -896,8 +905,6 @@ public class SVMHost extends HostVM {
          * These fields need to be folded as they are used in snippets, and they must be accessed
          * without producing reads with side effects.
          */
-        excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "arrayHub"));
-        excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "additionalFlags"));
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "layoutEncoding"));
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "numClassTypes"));
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "numInterfaceTypes"));
@@ -906,6 +913,9 @@ public class SVMHost extends HostVM {
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "typeID"));
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "monitorOffset"));
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "hubType"));
+        excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "companion"));
+        excludedFields.add(ReflectionUtil.lookupField(DynamicHubCompanion.class, "arrayHub"));
+        excludedFields.add(ReflectionUtil.lookupField(DynamicHubCompanion.class, "additionalFlags"));
 
         /* Needs to be immutable for correct lowering of SubstrateIdentityHashCodeNode. */
         excludedFields.add(ReflectionUtil.lookupField(DynamicHub.class, "identityHashOffset"));
