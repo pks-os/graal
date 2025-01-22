@@ -1,6 +1,6 @@
 # pylint: disable=line-too-long
 suite = {
-    "mxversion": "7.33.1",
+    "mxversion": "7.38.0",
     "name": "substratevm",
     "version" : "25.0.0",
     "release" : False,
@@ -2589,6 +2589,14 @@ suite = {
                     "com.oracle.svm.interpreter,com.oracle.svm.jdwp.resident to org.graalvm.nativeimage.builder",
                 ],
             }
+        },
+
+        "SVM_JDWP_RESIDENT_SUPPORT" : {
+            "native" : True,
+            "description" : "JDWP debugging support",
+            "layout" : {
+                "native-image.properties" : "file:mx.substratevm/macro-svmjdwp.properties",
+            },
         },
 
         "SVM_JDWP_SERVER": {
