@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -38,39 +38,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.graalvm.wasm.memory;
+package com.oracle.truffle.runtime.hotspot.libgraal;
 
-import org.graalvm.wasm.exception.Failure;
+import static com.oracle.truffle.compiler.hotspot.libgraal.TruffleToLibGraal.Id.GetCompilationId;
 
-import static org.graalvm.wasm.Assert.assertTrue;
+import com.oracle.truffle.compiler.hotspot.libgraal.TruffleToLibGraal;
 
-public class WasmMemoryFactory {
-    public static WasmMemory createMemory(long declaredMinSize, long declaredMaxSize, boolean indexType64, boolean shared, boolean unsafeMemory, boolean directByteBufferMemoryAccess) {
-        if (directByteBufferMemoryAccess) {
-            assertTrue(unsafeMemory, "DirectByteBufferMemoryAccess is only supported when UseUnsafeMemory flag is set.", Failure.SHARED_MEMORY_WITHOUT_UNSAFE);
-        }
-        if (shared) {
-            assertTrue(unsafeMemory, "Shared memories are only supported when UseUnsafeMemory flag is set.", Failure.SHARED_MEMORY_WITHOUT_UNSAFE);
-        }
+final class TruffleToLibGraalCalls2 {
 
-        if (unsafeMemory) {
-            if (directByteBufferMemoryAccess || shared) {
-                return new UnsafeWasmMemory(declaredMinSize, declaredMaxSize, indexType64, shared);
-            } else if (declaredMaxSize > ByteArrayWasmMemory.MAX_ALLOWED_SIZE) {
-                return new NativeWasmMemory(declaredMinSize, declaredMaxSize, indexType64, shared);
-            }
-        }
-        return new ByteArrayWasmMemory(declaredMinSize, declaredMaxSize, indexType64, shared);
-    }
-
-    public static long getMaximumAllowedSize(boolean shared, boolean unsafeMemory, boolean directByteBufferMemoryAccess) {
-        if (unsafeMemory) {
-            if (directByteBufferMemoryAccess || shared) {
-                return UnsafeWasmMemory.MAX_ALLOWED_SIZE;
-            } else {
-                return NativeWasmMemory.MAX_ALLOWED_SIZE;
-            }
-        }
-        return ByteArrayWasmMemory.MAX_ALLOWED_SIZE;
-    }
+    @TruffleToLibGraal(GetCompilationId)
+    static native long getCompilationId(long isolateThreadAddress, long handle);
 }

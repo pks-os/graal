@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * The Universal Permissive License (UPL), Version 1.0
@@ -38,39 +38,37 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.graalvm.wasm.memory;
+package com.oracle.truffle.api.test;
 
-import org.graalvm.wasm.exception.Failure;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import static org.graalvm.wasm.Assert.assertTrue;
+import org.graalvm.polyglot.Context;
+import org.junit.Assert;
+import org.junit.Assume;
+import org.junit.Test;
 
-public class WasmMemoryFactory {
-    public static WasmMemory createMemory(long declaredMinSize, long declaredMaxSize, boolean indexType64, boolean shared, boolean unsafeMemory, boolean directByteBufferMemoryAccess) {
-        if (directByteBufferMemoryAccess) {
-            assertTrue(unsafeMemory, "DirectByteBufferMemoryAccess is only supported when UseUnsafeMemory flag is set.", Failure.SHARED_MEMORY_WITHOUT_UNSAFE);
+import com.oracle.truffle.tck.tests.TruffleTestAssumptions;
+
+public class CompilationIdLogTest {
+
+    @Test
+    public void testCompilationIdAvailable() throws IOException {
+        /*
+         * This test runs with jargraal, libgraal, polyglot isolates, and on SVM.
+         */
+        Runtime.Version jdkVersion = Runtime.version();
+        Assume.assumeTrue("Not running with optimizing runtime", TruffleTestAssumptions.isOptimizingRuntime());
+        Assume.assumeTrue("Too old JDK feature version", jdkVersion.feature() >= 25);
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream();
+                        Context context = Context.newBuilder().out(out).err(out).allowExperimentalOptions(true).option("engine.CompileImmediately", "true").option("engine.BackgroundCompilation",
+                                        "false").option("engine.TraceCompilation", "true").build()) {
+            context.eval("instrumentation-test-language", "CONSTANT(true)");
+            Pattern compilationIdPattern = Pattern.compile("\\[engine] opt done.*CompId \\d+");
+            Matcher compilationIdMatcher = compilationIdPattern.matcher(out.toString());
+            Assert.assertTrue(out.toString(), compilationIdMatcher.find());
         }
-        if (shared) {
-            assertTrue(unsafeMemory, "Shared memories are only supported when UseUnsafeMemory flag is set.", Failure.SHARED_MEMORY_WITHOUT_UNSAFE);
-        }
-
-        if (unsafeMemory) {
-            if (directByteBufferMemoryAccess || shared) {
-                return new UnsafeWasmMemory(declaredMinSize, declaredMaxSize, indexType64, shared);
-            } else if (declaredMaxSize > ByteArrayWasmMemory.MAX_ALLOWED_SIZE) {
-                return new NativeWasmMemory(declaredMinSize, declaredMaxSize, indexType64, shared);
-            }
-        }
-        return new ByteArrayWasmMemory(declaredMinSize, declaredMaxSize, indexType64, shared);
-    }
-
-    public static long getMaximumAllowedSize(boolean shared, boolean unsafeMemory, boolean directByteBufferMemoryAccess) {
-        if (unsafeMemory) {
-            if (directByteBufferMemoryAccess || shared) {
-                return UnsafeWasmMemory.MAX_ALLOWED_SIZE;
-            } else {
-                return NativeWasmMemory.MAX_ALLOWED_SIZE;
-            }
-        }
-        return ByteArrayWasmMemory.MAX_ALLOWED_SIZE;
     }
 }
