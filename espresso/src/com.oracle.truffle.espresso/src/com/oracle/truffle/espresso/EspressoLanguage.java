@@ -86,10 +86,10 @@ import com.oracle.truffle.espresso.runtime.staticobject.StaticObject.StaticObjec
 import com.oracle.truffle.espresso.shared.meta.SymbolPool;
 import com.oracle.truffle.espresso.substitutions.JImageExtensions;
 import com.oracle.truffle.espresso.substitutions.Substitutions;
-import com.oracle.truffle.espresso.substitutions.Target_sun_misc_Unsafe.CompactGuestFieldOffsetStrategy;
-import com.oracle.truffle.espresso.substitutions.Target_sun_misc_Unsafe.GraalGuestFieldOffsetStrategy;
-import com.oracle.truffle.espresso.substitutions.Target_sun_misc_Unsafe.GuestFieldOffsetStrategy;
-import com.oracle.truffle.espresso.substitutions.Target_sun_misc_Unsafe.SafetyGuestFieldOffsetStrategy;
+import com.oracle.truffle.espresso.substitutions.standard.Target_sun_misc_Unsafe.CompactGuestFieldOffsetStrategy;
+import com.oracle.truffle.espresso.substitutions.standard.Target_sun_misc_Unsafe.GraalGuestFieldOffsetStrategy;
+import com.oracle.truffle.espresso.substitutions.standard.Target_sun_misc_Unsafe.GuestFieldOffsetStrategy;
+import com.oracle.truffle.espresso.substitutions.standard.Target_sun_misc_Unsafe.SafetyGuestFieldOffsetStrategy;
 
 // TODO: Update website once Espresso has one
 @Registration(id = EspressoLanguage.ID, //
@@ -173,10 +173,13 @@ public final class EspressoLanguage extends TruffleLanguage<EspressoContext> imp
         JavaKind.ensureInitialized();
         Substitutions.ensureInitialized();
         EspressoSymbols.ensureInitialized();
-        // Raw symbols are not exposed directly, use the typed interfaces: Names, Types and
-        // Signatures instead.
-        Symbols symbols = new Symbols(EspressoSymbols.SYMBOLS.freeze());
-        this.utf8Constants = new Utf8ConstantTable(symbols);
+        // Raw symbols are not exposed directly, use the typed interfaces: NameSymbols, TypeSymbols
+        // and SignatureSymbols instead.
+        // HelloWorld requires ~25K symbols. Give enough space to the symbol table to avoid resizing
+        // during startup.
+        int initialSymbolTableCapacity = 1 << 16;
+        Symbols symbols = Symbols.fromExisting(EspressoSymbols.SYMBOLS.freeze(), initialSymbolTableCapacity);
+        this.utf8Constants = new Utf8ConstantTable(symbols, initialSymbolTableCapacity);
         this.nameSymbols = new NameSymbols(symbols);
         this.typeSymbols = new TypeSymbols(symbols);
         this.signatureSymbols = new SignatureSymbols(symbols, typeSymbols);

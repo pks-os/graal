@@ -199,8 +199,8 @@ import jdk.vm.ci.meta.ResolvedJavaType;
  * appropriately to comply with the layouts above.
  */
 // @formatter:off
-@SyncPort(from = "https://github.com/openjdk/jdk/blob/c113f82f78c7d9be1ac297aebfeb6051f0f904fb/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L175-L499",
-          sha1 = "7bf54a5cd262e46c33067da8674032974e80af08")
+@SyncPort(from = "https://github.com/openjdk/jdk/blob/7a5acb9be17cd54bbd0abf2524386b981dd5ac04/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L174-L495",
+          sha1 = "eeccf08eec0f427f9056a88620ff3f53ab8c189c")
 // @formatter:on
 public class MonitorSnippets implements Snippets {
 
@@ -413,7 +413,7 @@ public class MonitorSnippets implements Snippets {
     }
 
     // @formatter:off
-    @SyncPort(from = "https://github.com/openjdk/jdk/blob/c113f82f78c7d9be1ac297aebfeb6051f0f904fb/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L501-L667",
+    @SyncPort(from = "https://github.com/openjdk/jdk/blob/8f8a879de03add68e385f2610863d3b4ddd86df7/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L497-L663",
               sha1 = "1c396a67926e92a2cbc64c27fe667142e9ec157d")
     // @formatter:on
     @SuppressWarnings("unused")
@@ -543,8 +543,8 @@ public class MonitorSnippets implements Snippets {
     }
 
     // @formatter:off
-    @SyncPort(from = "https://github.com/openjdk/jdk/blob/78b80150e009745b8f28d36c3836f18ad0ca921f/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L669-L838",
-              sha1 = "34c70e9dd2d3093e82189a25c056e7fdb1aff506")
+    @SyncPort(from = "https://github.com/openjdk/jdk/blob/7a5acb9be17cd54bbd0abf2524386b981dd5ac04/src/hotspot/cpu/x86/c2_MacroAssembler_x86.cpp#L665-L832",
+              sha1 = "ad63b9816f3e1851c7defe445488b49dd49e69d6")
     // @formatter:on
     private static boolean tryLightweightUnlocking(Object object, Word thread, Word lock, boolean trace, Counters counters) {
         // Load top

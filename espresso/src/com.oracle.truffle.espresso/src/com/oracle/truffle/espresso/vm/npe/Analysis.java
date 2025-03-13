@@ -20,7 +20,6 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
 package com.oracle.truffle.espresso.vm.npe;
 
 import static com.oracle.truffle.espresso.classfile.bytecode.Bytecodes.AALOAD;
@@ -290,7 +289,7 @@ final class Analysis implements LanguageAccess {
         // Initialize stack at bci 0
         registerStack(new SimulatedStack(maxStack), 0);
         // Initialize stack at exception handlers
-        for (ExceptionHandler handler : m.getExceptionHandlers()) {
+        for (ExceptionHandler handler : m.getSymbolicExceptionHandlers()) {
             int bci = handler.getHandlerBCI();
             registerStack(new SimulatedStack(maxStack).push(UNKNOWN_BCI, OBJECT), bci);
         }

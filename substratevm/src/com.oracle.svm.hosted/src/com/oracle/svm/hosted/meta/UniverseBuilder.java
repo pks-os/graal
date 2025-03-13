@@ -44,6 +44,7 @@ import java.util.concurrent.ForkJoinTask;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.nativeimage.c.function.CEntryPointLiteral;
 import org.graalvm.nativeimage.c.function.CFunction;
 import org.graalvm.nativeimage.c.function.CFunctionPointer;
@@ -84,6 +85,7 @@ import com.oracle.svm.core.hub.DynamicHub;
 import com.oracle.svm.core.hub.DynamicHubSupport;
 import com.oracle.svm.core.hub.LayoutEncoding;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
+import com.oracle.svm.core.layeredimagesingleton.MultiLayeredImageSingleton;
 import com.oracle.svm.core.meta.MethodPointer;
 import com.oracle.svm.core.reflect.SubstrateConstructorAccessor;
 import com.oracle.svm.core.reflect.SubstrateMethodAccessor;
@@ -99,6 +101,7 @@ import com.oracle.svm.hosted.config.HybridLayout;
 import com.oracle.svm.hosted.heap.PodSupport;
 import com.oracle.svm.hosted.imagelayer.HostedDynamicLayerInfo;
 import com.oracle.svm.hosted.imagelayer.HostedImageLayerBuildingSupport;
+import com.oracle.svm.hosted.imagelayer.SVMImageLayerLoader;
 import com.oracle.svm.hosted.substitute.AnnotationSubstitutionProcessor;
 import com.oracle.svm.hosted.substitute.DeletedMethod;
 import com.oracle.svm.util.ReflectionUtil;
@@ -106,7 +109,6 @@ import com.oracle.svm.util.ReflectionUtil;
 import jdk.graal.compiler.core.common.NumUtil;
 import jdk.graal.compiler.debug.DebugContext;
 import jdk.graal.compiler.debug.Indent;
-import jdk.graal.compiler.serviceprovider.GraalServices;
 import jdk.internal.vm.annotation.Contended;
 import jdk.vm.ci.meta.ConstantPool;
 import jdk.vm.ci.meta.ExceptionHandler;
@@ -220,7 +222,7 @@ public class UniverseBuilder {
 
         String typeName = aType.getName();
 
-        assert GraalServices.isBuildingLibgraal() || !typeName.contains("/hotspot/") || typeName.contains("/jtt/hotspot/") || typeName.contains("/hotspot/shared/") : "HotSpot object in image " +
+        assert ImageInfo.inImageBuildtimeCode() || !typeName.contains("/hotspot/") || typeName.contains("/jtt/hotspot/") || typeName.contains("/hotspot/shared/") : "HotSpot object in image " +
                         typeName;
         assert !typeName.contains("/analysis/meta/") : "Analysis meta object in image " + typeName;
         assert !typeName.contains("/hosted/meta/") : "Hosted meta object in image " + typeName;
@@ -691,7 +693,7 @@ public class UniverseBuilder {
                 offset = endOffset + getAlignmentAdjustment(endOffset, fieldSize);
             }
             reserve(usedBytes, offset, fieldSize);
-            field.setLocation(offset);
+            field.setLocation(offset, MultiLayeredImageSingleton.NONSTATIC_FIELD_LAYER_NUMBER);
         }
     }
 
@@ -775,22 +777,26 @@ public class UniverseBuilder {
         @SuppressWarnings("unchecked")
         List<HostedField>[] fieldsOfTypes = (List<HostedField>[]) new ArrayList<?>[DynamicHubSupport.currentLayer().getMaxTypeId()];
 
+        SVMImageLayerLoader loader = ImageLayerBuildingSupport.buildingExtensionLayer() ? HostedImageLayerBuildingSupport.singleton().getLoader() : null;
         for (HostedField field : fields) {
             if (skipStaticField(field)) {
                 // does not require memory.
-            } else if (field.wrapped.isInBaseLayer()) {
-                field.setLocation(HostedImageLayerBuildingSupport.singleton().getLoader().getFieldLocation(field.wrapped));
-            } else if (field.getStorageKind() == JavaKind.Object) {
-                field.setLocation(NumUtil.safeToInt(layout.getArrayElementOffset(JavaKind.Object, nextObjectField)));
-                nextObjectField += 1;
             } else {
-                int fieldSize = layout.sizeInBytes(field.getStorageKind());
-                while (layout.getArrayElementOffset(JavaKind.Byte, nextPrimitiveField) % fieldSize != 0) {
-                    // Insert padding byte for alignment
-                    nextPrimitiveField++;
+                int layerNum = StaticFieldsSupport.getInstalledLayerNum(field.wrapped);
+                if (field.wrapped.isInBaseLayer()) {
+                    field.setLocation(loader.getFieldLocation(field.wrapped), layerNum);
+                } else if (field.getStorageKind() == JavaKind.Object) {
+                    field.setLocation(NumUtil.safeToInt(layout.getArrayElementOffset(JavaKind.Object, nextObjectField)), layerNum);
+                    nextObjectField += 1;
+                } else {
+                    int fieldSize = layout.sizeInBytes(field.getStorageKind());
+                    while (layout.getArrayElementOffset(JavaKind.Byte, nextPrimitiveField) % fieldSize != 0) {
+                        // Insert padding byte for alignment
+                        nextPrimitiveField++;
+                    }
+                    field.setLocation(NumUtil.safeToInt(layout.getArrayElementOffset(JavaKind.Byte, nextPrimitiveField)), layerNum);
+                    nextPrimitiveField += fieldSize;
                 }
-                field.setLocation(NumUtil.safeToInt(layout.getArrayElementOffset(JavaKind.Byte, nextPrimitiveField)));
-                nextPrimitiveField += fieldSize;
             }
 
             int typeId = field.getDeclaringClass().getTypeID();
@@ -814,8 +820,8 @@ public class UniverseBuilder {
         byte[] staticPrimitiveFields = new byte[nextPrimitiveField];
         StaticFieldsSupport.setData(staticObjectFields, staticPrimitiveFields);
         /* After initializing the static field arrays add them to the shadow heap. */
-        aUniverse.getHeapScanner().rescanObject(StaticFieldsSupport.getStaticObjectFields());
-        aUniverse.getHeapScanner().rescanObject(StaticFieldsSupport.getStaticPrimitiveFields());
+        aUniverse.getHeapScanner().rescanObject(StaticFieldsSupport.getCurrentLayerStaticObjectFields());
+        aUniverse.getHeapScanner().rescanObject(StaticFieldsSupport.getCurrentLayerStaticPrimitiveFields());
     }
 
     @SuppressWarnings("unchecked")
@@ -906,6 +912,9 @@ public class UniverseBuilder {
             ReferenceMapEncoder.Input referenceMap = referenceMaps.get(type);
             assert referenceMap != null;
             assert ((SubstrateReferenceMap) referenceMap).hasNoDerivedOffsets();
+            ReferenceMapEncoder.OffsetIterator iter = referenceMap.getOffsets();
+            assert !iter.hasNext() || iter.nextInt() >= ConfigurationValues.getObjectLayout().getFirstFieldOffset();
+
             long referenceMapIndex = referenceMapEncoder.lookupEncoding(referenceMap);
 
             DynamicHub hub = type.getHub();
@@ -968,7 +977,6 @@ public class UniverseBuilder {
 
     private static ReferenceMapEncoder.Input createReferenceMap(HostedType type) {
         HostedField[] fields = type.getInstanceFields(true);
-
         SubstrateReferenceMap referenceMap = new SubstrateReferenceMap();
         for (HostedField field : fields) {
             if (field.getType().getStorageKind() == JavaKind.Object && field.hasLocation() && !excludeFromReferenceMap(field)) {

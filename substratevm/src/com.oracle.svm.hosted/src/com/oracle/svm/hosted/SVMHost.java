@@ -238,7 +238,7 @@ public class SVMHost extends HostVM {
         }
         layerId = ImageLayerBuildingSupport.buildingImageLayer() ? DynamicImageLayerInfo.singleton().layerNumber : 0;
         useBaseLayer = ImageLayerBuildingSupport.buildingExtensionLayer();
-        if (SubstrateOptions.includeAll()) {
+        if (ImageLayerBuildingSupport.buildingSharedLayer()) {
             initializeExcludedFields();
         }
 
@@ -520,6 +520,8 @@ public class SVMHost extends HostVM {
         String simpleBinaryName = stringTable.deduplicate(getSimpleBinaryName(javaClass), true);
 
         Class<?> nestHost = javaClass.getNestHost();
+        VMError.guarantee(platformSupported(nestHost), "The NestHost %s for %s is not available in this platform.", nestHost, javaClass);
+
         boolean isHidden = javaClass.isHidden();
         boolean isRecord = javaClass.isRecord();
         boolean assertionStatus = RuntimeAssertionsSupport.singleton().desiredAssertionStatus(javaClass);
@@ -738,7 +740,7 @@ public class SVMHost extends HostVM {
 
     @Override
     public void methodBeforeTypeFlowCreationHook(BigBang bb, AnalysisMethod method, StructuredGraph graph) {
-        if (method.isEntryPoint() && !Modifier.isStatic(graph.method().getModifiers())) {
+        if (method.isNativeEntryPoint() && !Modifier.isStatic(graph.method().getModifiers())) {
             ValueNode receiver = graph.start().stateAfter().localAt(0);
             if (receiver != null && receiver.hasUsages()) {
                 /*
@@ -929,6 +931,15 @@ public class SVMHost extends HostVM {
         excludedFields.add(ReflectionUtil.lookupField(Counter.Group.class, "enabled"));
         /* This field can contain a reference to a Thread, which is not allowed in the heap */
         excludedFields.add(ReflectionUtil.lookupField(NativeLibraries.class, "nativeLibraryLockMap"));
+    }
+
+    @Override
+    public boolean sortFields() {
+        /*
+         * If building layered images sort the fields by kind and name to ensure stable order.
+         * Sorting fields in general may lead to some issues. (GR-62599)
+         */
+        return ImageLayerBuildingSupport.buildingImageLayer();
     }
 
     /**

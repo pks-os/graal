@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -385,7 +385,7 @@ import com.oracle.truffle.espresso.shared.resolver.CallKind;
 import com.oracle.truffle.espresso.shared.resolver.CallSiteType;
 import com.oracle.truffle.espresso.shared.resolver.FieldAccessType;
 import com.oracle.truffle.espresso.shared.resolver.ResolvedCall;
-import com.oracle.truffle.espresso.substitutions.Target_java_lang_invoke_MethodHandleNatives.SiteTypes;
+import com.oracle.truffle.espresso.substitutions.standard.Target_java_lang_invoke_MethodHandleNatives.SiteTypes;
 import com.oracle.truffle.espresso.vm.InterpreterToVM;
 import com.oracle.truffle.espresso.vm.continuation.HostFrameRecord;
 import com.oracle.truffle.espresso.vm.continuation.UnwindContinuationException;
@@ -499,7 +499,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
     }
 
     Source getSource() {
-        return getMethodVersion().getSource();
+        return getMethodVersion().getMethod().getSource();
     }
 
     public SourceSection getSourceSectionAtBCI(int bci) {
@@ -2110,7 +2110,7 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         }
     }
 
-    protected RuntimeConstantPool getConstantPool() {
+    private RuntimeConstantPool getConstantPool() {
         return getMethodVersion().getPool();
     }
 
@@ -2983,19 +2983,19 @@ public final class BytecodeNode extends AbstractInstrumentableBytecodeNode imple
         }
 
         public void notifyEntry(VirtualFrame frame, AbstractInstrumentableBytecodeNode instrumentableNode) {
-            if (context.shouldReportVMEvents() && method.hasActiveHook()) {
+            if (context.shouldReportVMEvents() && method.getMethod().hasActiveHook()) {
                 context.reportOnMethodEntry(method, instrumentableNode.getScope(frame, true));
             }
         }
 
         public void notifyResume(VirtualFrame frame, AbstractInstrumentableBytecodeNode instrumentableNode) {
-            if (context.shouldReportVMEvents() && method.hasActiveHook()) {
+            if (context.shouldReportVMEvents() && method.getMethod().hasActiveHook()) {
                 context.reportOnMethodEntry(method, instrumentableNode.getScope(frame, true));
             }
         }
 
         public void notifyReturn(VirtualFrame frame, int statementIndex, Object returnValue) {
-            if (context.shouldReportVMEvents() && method.hasActiveHook()) {
+            if (context.shouldReportVMEvents() && method.getMethod().hasActiveHook()) {
                 if (context.reportOnMethodReturn(method, returnValue)) {
                     exitAt(frame, statementIndex, returnValue);
                 }

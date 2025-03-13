@@ -304,12 +304,15 @@ public class LoopSafepointEliminationPhase extends BasePhase<MidTierContext> {
         }
 
         public LoopSafepointPlan optimizeSafepoints() {
+            LoopsData loops = context.getLoopsDataProvider().getLoopsData(graph);
+            loops.detectCountedLoops();
+            return optimizeSafepoints(loops);
+        }
+
+        public LoopSafepointPlan optimizeSafepoints(LoopsData loops) {
             LoopSafepointPlan graphWidePlan = new LoopSafepointPlan(graph);
 
             final boolean optimisticallyRemoveLoopSafepoints = Options.RemoveLoopSafepoints.getValue(graph.getOptions());
-
-            LoopsData loops = context.getLoopsDataProvider().getLoopsData(graph);
-            loops.detectCountedLoops();
 
             for (Loop loop : loops.loops()) {
                 if (!allowGuestSafepoints()) {
@@ -339,7 +342,7 @@ public class LoopSafepointEliminationPhase extends BasePhase<MidTierContext> {
                 }
                 final boolean allLoopEndSafepointsEnabled = loopEndSafepointsDisabled == 0;
                 // strip mined outer is never counted
-                final boolean stripMinedOuter = loop.loopBegin().isStripMinedOuter();
+                final boolean stripMinedOuter = loop.loopBegin().isAnyStripMinedOuter();
                 // retain the exit safepoint for all non-counted loops
                 if (loop.isCounted() || stripMinedOuter) {
                     if (allLoopEndSafepointsEnabled || allLoopEndSafepointsDisabledByBodyNodes) {
@@ -395,7 +398,7 @@ public class LoopSafepointEliminationPhase extends BasePhase<MidTierContext> {
                 final boolean preLoop = loop.loopBegin().isPreLoop();
                 final boolean postLoop = loop.loopBegin().isPostLoop();
                 final boolean briefLoop = loopIsInBriefRange(loop);
-                final boolean stripMinedInner = loop.loopBegin().isStripMinedInner();
+                final boolean stripMinedInner = loop.loopBegin().isAnyStripMinedInner();
                 if (leafLoop && (preLoop || postLoop || briefLoop || stripMinedInner)) {
                     boolean hasSafepoint = false;
                     for (LoopEndNode loopEnd : loop.loopBegin().loopEnds()) {

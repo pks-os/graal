@@ -2192,32 +2192,66 @@ public final class JniEnv extends NativeEnv {
 
         Meta meta = getMeta();
         if (name == null || signature == null) {
-            StaticObject ex = Meta.initException(meta.java_lang_NoSuchMethodError);
-            getLanguage().setPendingException(EspressoException.wrap(ex, meta));
-            return JNI_ERR;
+            return handleNoSuchMethod(meta);
         }
-
         Method targetMethod = clazz.getMirrorKlass(getMeta()).lookupDeclaredMethod(name, signature);
-        if (targetMethod != null && targetMethod.isNative()) {
-            targetMethod.unregisterNative();
-            getSubstitutions().removeRuntimeSubstitution(targetMethod);
-        } else {
-            StaticObject ex = Meta.initException(meta.java_lang_NoSuchMethodError);
-            getLanguage().setPendingException(EspressoException.wrap(ex, meta));
-            return JNI_ERR;
+        if (targetMethod == null || !targetMethod.isNative()) {
+            // agents might have set native method prefix, so check with those as well
+            targetMethod = findPrefixedNative(name, clazz, signature);
         }
+        if (targetMethod == null) {
+            // OK, nowhere to be found, so give up
+            return handleNoSuchMethod(meta);
+        }
+        // make sure we have the correct method name also for prefixed methods
+        name = targetMethod.getName();
+        targetMethod.unregisterNative();
+        getSubstitutions().removeRuntimeSubstitution(targetMethod);
 
         // Lookup known VM methods to shortcut native boundaries.
         Substitutions.EspressoRootNodeFactory factory = lookupKnownVmMethods(closure, targetMethod);
         if (factory == null) {
             NativeSignature ns = Method.buildJniNativeSignature(targetMethod.getParsedSignature());
             final TruffleObject boundNative = getNativeAccess().bindSymbol(closure, ns);
-            factory = createJniRootNodeFactory(() -> EspressoRootNode.createNative(getContext().getJNI(closure), targetMethod.getMethodVersion(), boundNative), targetMethod);
+            final Method finalTargetMethod = targetMethod;
+            factory = createJniRootNodeFactory(() -> EspressoRootNode.createNative(getContext().getJNI(closure), finalTargetMethod.getMethodVersion(), boundNative), targetMethod);
         }
 
         Symbol<Type> classType = clazz.getMirrorKlass(getMeta()).getType();
         getSubstitutions().registerRuntimeSubstitution(classType, name, signature, factory, true);
         return JNI_OK;
+    }
+
+    private Method findPrefixedNative(Symbol<Name> name, @JavaType(Class.class) StaticObject clazz, Symbol<Signature> signature) {
+        if (getContext().getJavaAgents() == null) {
+            return null;
+        }
+        Symbol<Name>[] allNativePrefixes = getContext().getJavaAgents().getAllNativePrefixes();
+        if (allNativePrefixes == Symbol.EMPTY_ARRAY) {
+            return null;
+        }
+        ByteSequence matchedName = name;
+        for (Symbol<Name> prefix : allNativePrefixes) {
+            Symbol<Name> trialName = getContext().getNames().getOrCreate(prefix.concat(matchedName));
+            Method method = clazz.getMirrorKlass(getMeta()).lookupDeclaredMethod(trialName, signature);
+            if (method == null) {
+                // doesn't match, try next prefix
+                continue;
+            }
+            if (method.isNative()) {
+                // we found a prefixed version of the method, return it
+                return method;
+            }
+            // found as non-native, so prefix is good, add it, probably just need more prefixes
+            matchedName = trialName;
+        }
+        return null;
+    }
+
+    private int handleNoSuchMethod(Meta meta) {
+        StaticObject ex = Meta.initException(meta.java_lang_NoSuchMethodError);
+        getLanguage().setPendingException(EspressoException.wrap(ex, meta));
+        return JNI_ERR;
     }
 
     private Substitutions.EspressoRootNodeFactory lookupKnownVmMethods(@Pointer TruffleObject closure, Method targetMethod) {

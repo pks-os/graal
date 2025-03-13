@@ -28,6 +28,7 @@ import java.lang.invoke.VarHandle;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -562,6 +563,7 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
     }
 
     protected void onInstantiated() {
+        assert !isWordType() : Assertions.errorMessage("Word types cannot be instantiated", this);
         forAllSuperTypes(superType -> AtomicUtils.atomicMark(superType, isAnySubtypeInstantiatedUpdater));
 
         universe.onTypeInstantiated(this);
@@ -670,6 +672,9 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
             AnalysisMethod override = resolveConcreteMethod(method, null);
             if (override != null && !override.equals(method)) {
                 ConcurrentLightHashSet.addElement(method, AnalysisMethod.allImplementationsUpdater, override);
+                if (method.reachableInCurrentLayer()) {
+                    override.setReachableInCurrentLayer();
+                }
             }
         });
     }
@@ -901,7 +906,9 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
      */
     public boolean isWordType() {
         /* Word types are currently the only types where kind and storageKind differ. */
-        return getJavaKind() != getStorageKind();
+        boolean wordType = getJavaKind() != getStorageKind();
+        assert !wordType || getJavaKind().isObject() : Assertions.errorMessage("Only words are expected to have a discrepancy between java kind and storage kind", this);
+        return wordType;
     }
 
     @Override
@@ -1221,8 +1228,16 @@ public abstract class AnalysisType extends AnalysisElement implements WrappedJav
         return result;
     }
 
+    static final Comparator<ResolvedJavaField> FIELD_COMPARATOR = Comparator.comparing(ResolvedJavaField::getJavaKind).thenComparing(ResolvedJavaField::getName);
+
     private ResolvedJavaField[] convertFields(ResolvedJavaField[] originals, List<ResolvedJavaField> list, boolean listIncludesSuperClassesFields) {
-        for (ResolvedJavaField original : originals) {
+        ResolvedJavaField[] localOriginals = originals;
+        if (universe.hostVM.sortFields()) {
+            /* Clone the originals; it is a reference to the wrapped type's instanceFields array. */
+            localOriginals = originals.clone();
+            Arrays.sort(localOriginals, FIELD_COMPARATOR);
+        }
+        for (ResolvedJavaField original : localOriginals) {
             if (!original.isInternal() && universe.hostVM.platformSupported(original)) {
                 try {
                     AnalysisField aField = universe.lookup(original);

@@ -1155,6 +1155,9 @@ public class SubstrateOptions {
         }
     };
 
+    @Option(help = "Determines if the system locale should be used at run-time. If this is disabled, the locale 'en-US' will be used instead.", stability = OptionStability.EXPERIMENTAL, type = Expert)//
+    public static final HostedOptionKey<Boolean> UseSystemLocale = new HostedOptionKey<>(true);
+
     @Option(help = "Dump heap to file (see HeapDumpPath) the first time the image throws java.lang.OutOfMemoryError because it ran out of Java heap.")//
     public static final RuntimeOptionKey<Boolean> HeapDumpOnOutOfMemoryError = new RuntimeOptionKey<>(false);
 
@@ -1168,6 +1171,9 @@ public class SubstrateOptions {
 
     @Option(help = "Create a heap dump and exit.")//
     public static final RuntimeOptionKey<Boolean> DumpHeapAndExit = new RuntimeOptionKey<>(false, Immutable);
+
+    @Option(help = "Print some VM information and exit.")//
+    public static final RuntimeOptionKey<Boolean> PrintVMInfoAndExit = new RuntimeOptionKey<>(false, Immutable);
 
     @Option(help = "Enable Java Flight Recorder.")//
     public static final RuntimeOptionKey<Boolean> FlightRecorder = new RuntimeOptionKey<>(false, Immutable);
@@ -1310,22 +1316,8 @@ public class SubstrateOptions {
     @Option(help = "Deprecated, option no longer has any effect.", deprecated = true, deprecationMessage = "It no longer has any effect, and no replacement is available")//
     public static final HostedOptionKey<Boolean> UseOldMethodHandleIntrinsics = new HostedOptionKey<>(false);
 
-    @Option(help = "Include all classes, methods, and fields from given modules", type = OptionType.Debug) //
-    public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> IncludeAllFromModule = new HostedOptionKey<>(AccumulatingLocatableMultiOptionValue.Strings.build());
-
-    @Option(help = "Include all classes, methods, fields, and resources from given paths", type = OptionType.Debug) //
-    public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> IncludeAllFromPath = new HostedOptionKey<>(AccumulatingLocatableMultiOptionValue.Strings.build());
-
-    @Option(help = "Include all classes, methods and fields from the given packages", type = OptionType.Debug) //
-    public static final HostedOptionKey<AccumulatingLocatableMultiOptionValue.Strings> IncludeAllFromPackage = new HostedOptionKey<>(
-                    AccumulatingLocatableMultiOptionValue.Strings.buildWithCommaDelimiter());
-
     @Option(help = "Include all classes, methods, fields, and resources from the class path", type = OptionType.Debug) //
     public static final HostedOptionKey<Boolean> IncludeAllFromClassPath = new HostedOptionKey<>(false);
-
-    public static boolean includeAll() {
-        return IncludeAllFromModule.hasBeenSet() || IncludeAllFromPath.hasBeenSet() || IncludeAllFromPackage.hasBeenSet() || IncludeAllFromClassPath.hasBeenSet();
-    }
 
     @Option(help = "Force include include all public types and methods that can be reached using normal Java access rules.")//
     public static final HostedOptionKey<Boolean> UseBaseLayerInclusionPolicy = new HostedOptionKey<>(false);
@@ -1386,4 +1378,7 @@ public class SubstrateOptions {
             throw UserError.invalidOptionValue(key, key.getValue(), "Mapping the image heap with mremap() is only supported on Linux.");
         }
     });
+
+    @Option(help = "file:doc-files/LibGraalClassLoader.txt")//
+    public static final HostedOptionKey<String> LibGraalClassLoader = new HostedOptionKey<>("");
 }

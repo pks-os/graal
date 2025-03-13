@@ -68,12 +68,11 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 
-import com.oracle.truffle.api.nodes.Node;
 import org.graalvm.wasm.Linker.ResolutionDag.CallsiteSym;
 import org.graalvm.wasm.Linker.ResolutionDag.CodeEntrySym;
 import org.graalvm.wasm.Linker.ResolutionDag.DataSym;
@@ -98,11 +97,11 @@ import org.graalvm.wasm.constants.GlobalModifier;
 import org.graalvm.wasm.exception.Failure;
 import org.graalvm.wasm.exception.WasmException;
 import org.graalvm.wasm.globals.WasmGlobal;
-import org.graalvm.wasm.memory.NativeDataInstanceUtil;
 import org.graalvm.wasm.memory.WasmMemory;
 import org.graalvm.wasm.memory.WasmMemoryLibrary;
 import org.graalvm.wasm.nodes.WasmCallStubNode;
 import org.graalvm.wasm.nodes.WasmDirectCallNode;
+import org.graalvm.wasm.nodes.WasmIndirectCallNode;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerAsserts;
@@ -110,7 +109,8 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.TruffleContext;
-import org.graalvm.wasm.nodes.WasmIndirectCallNode;
+import com.oracle.truffle.api.exception.AbstractTruffleException;
+import com.oracle.truffle.api.nodes.Node;
 
 public class Linker {
     public enum LinkState {
@@ -140,9 +140,9 @@ public class Linker {
     }
 
     /**
-     * @see #tryLinkOutsidePartialEvaluation(WasmInstance, Function)
+     * @see #tryLinkOutsidePartialEvaluation(WasmInstance, ImportValueSupplier)
      */
-    public void tryLink(WasmInstance instance, Function<ImportDescriptor, Object> imports) {
+    public void tryLink(WasmInstance instance, ImportValueSupplier imports) {
         if (instance.isNonLinked() || instance.isLinkFailed()) {
             tryLinkOutsidePartialEvaluation(instance, imports);
         } else {
@@ -171,7 +171,7 @@ public class Linker {
      *            the normal lookup from modules loaded in the context.
      */
     @CompilerDirectives.TruffleBoundary
-    private void tryLinkOutsidePartialEvaluation(WasmInstance entryPointInstance, Function<ImportDescriptor, Object> imports) {
+    private void tryLinkOutsidePartialEvaluation(WasmInstance entryPointInstance, ImportValueSupplier imports) {
         if (entryPointInstance.isLinkFailed()) {
             // If the linking of this module failed already, then throw.
             throw linkFailedError(entryPointInstance);
@@ -194,7 +194,7 @@ public class Linker {
         }
     }
 
-    private static int runLinkActions(WasmContext context, Map<String, WasmInstance> instances, Function<ImportDescriptor, Object> imports, ArrayList<Throwable> failures) {
+    private static int runLinkActions(WasmContext context, Map<String, WasmInstance> instances, ImportValueSupplier imports, ArrayList<Throwable> failures) {
         int maxStartFunctionIndex = 0;
         for (WasmInstance instance : instances.values()) {
             maxStartFunctionIndex = Math.max(maxStartFunctionIndex, instance.startFunctionIndex());
@@ -307,10 +307,12 @@ public class Linker {
     private static void checkFailures(ArrayList<Throwable> failures) {
         if (!failures.isEmpty()) {
             final Throwable first = failures.get(0);
-            if (first instanceof WasmException) {
-                throw (WasmException) first;
-            } else if (first instanceof RuntimeException) {
-                throw (RuntimeException) first;
+            if (first instanceof AbstractTruffleException e) {
+                throw e;
+            } else if (first instanceof RuntimeException e) {
+                throw e;
+            } else if (first instanceof Error e) { // includes ThreadDeath
+                throw e;
             } else {
                 throw new RuntimeException(first);
             }
@@ -318,11 +320,11 @@ public class Linker {
     }
 
     void resolveGlobalImport(WasmContext context, WasmInstance instance, ImportDescriptor importDescriptor, int globalIndex, byte valueType, byte mutability,
-                    Function<ImportDescriptor, Object> imports) {
+                    ImportValueSupplier imports) {
         final String importedGlobalName = importDescriptor.memberName();
         final String importedModuleName = importDescriptor.moduleName();
         final Runnable resolveAction = () -> {
-            final WasmGlobal externalGlobal = lookupImportObject(importDescriptor, imports, WasmGlobal.class);
+            final WasmGlobal externalGlobal = lookupImportObject(instance, importDescriptor, imports, WasmGlobal.class);
             final int globalAddress;
             final byte exportedValueType;
             final byte exportedMutability;
@@ -391,9 +393,9 @@ public class Linker {
         resolutionDag.resolveLater(new InitializeGlobalSym(instance.name(), globalIndex), dependencies.toArray(new Sym[0]), resolveAction);
     }
 
-    private static <T> T lookupImportObject(ImportDescriptor importDescriptor, Function<ImportDescriptor, Object> resolvedImports, Class<T> expectedType) {
+    private static <T> T lookupImportObject(WasmInstance instance, ImportDescriptor importDescriptor, ImportValueSupplier resolvedImports, Class<T> expectedType) {
         if (resolvedImports != null) {
-            Object resolvedImport = resolvedImports.apply(importDescriptor);
+            Object resolvedImport = resolvedImports.get(importDescriptor, instance);
             if (resolvedImport != null) {
                 return expectedType.cast(resolvedImport);
             }
@@ -412,12 +414,12 @@ public class Linker {
         }
     }
 
-    void resolveFunctionImport(WasmContext context, WasmInstance instance, WasmFunction function, Function<ImportDescriptor, Object> imports) {
+    void resolveFunctionImport(WasmContext context, WasmInstance instance, WasmFunction function, ImportValueSupplier imports) {
         final Runnable resolveAction = () -> {
             WasmModule module = instance.module();
             ImportDescriptor importDescriptor = function.importDescriptor();
             assert module.importedFunction(importDescriptor) == function;
-            Object externalFunctionInstance = lookupImportObject(importDescriptor, imports, Object.class);
+            Object externalFunctionInstance = lookupImportObject(instance, importDescriptor, imports, Object.class);
             if (externalFunctionInstance != null) {
                 if (externalFunctionInstance instanceof WasmFunctionInstance functionInstance) {
                     if (!function.type().equals(functionInstance.function().type())) {
@@ -467,7 +469,8 @@ public class Linker {
     }
 
     void resolveFunctionExport(WasmModule module, int functionIndex, String exportedFunctionName) {
-        final ImportDescriptor importDescriptor = module.symbolTable().function(functionIndex).importDescriptor();
+        final WasmFunction function = module.symbolTable().function(functionIndex);
+        final ImportDescriptor importDescriptor = function.importDescriptor();
         final Sym[] dependencies = (importDescriptor != null) ? new Sym[]{new ImportFunctionSym(module.name(), importDescriptor, functionIndex)} : ResolutionDag.NO_DEPENDENCIES;
         resolutionDag.resolveLater(new ExportFunctionSym(module.name(), exportedFunctionName), dependencies, NO_RESOLVE_ACTION);
     }
@@ -500,14 +503,14 @@ public class Linker {
     }
 
     void resolveMemoryImport(WasmContext context, WasmInstance instance, ImportDescriptor importDescriptor, int memoryIndex, long declaredMinSize, long declaredMaxSize, boolean typeIndex64,
-                    boolean shared, Function<ImportDescriptor, Object> imports) {
+                    boolean shared, ImportValueSupplier imports) {
         final String importedModuleName = importDescriptor.moduleName();
         final String importedMemoryName = importDescriptor.memberName();
         // Special import of main module memory into WASI built-in module.
         final boolean importsMainMemory = instance.module().isBuiltin() && importedModuleName.equals("main") && importedMemoryName.equals("memory");
         final Runnable resolveAction = () -> {
             final WasmMemory importedMemory;
-            final WasmMemory externalMemory = lookupImportObject(importDescriptor, imports, WasmMemory.class);
+            final WasmMemory externalMemory = lookupImportObject(instance, importDescriptor, imports, WasmMemory.class);
             if (externalMemory != null) {
                 final int contextMemoryIndex = context.memories().registerExternal(externalMemory);
                 importedMemory = context.memories().memory(contextMemoryIndex);
@@ -750,7 +753,7 @@ public class Linker {
     void resolveDataSegment(WasmContext context, WasmInstance instance, int dataSegmentId, int memoryIndex, long offsetAddress, byte[] offsetBytecode, int byteLength, int bytecodeOffset,
                     int droppedDataInstanceOffset) {
         assertUnsignedIntLess(memoryIndex, instance.symbolTable().memoryCount(), Failure.UNSPECIFIED_MALFORMED,
-                        String.format("Specified memory was not declared or imported in the module '%s'", instance.name()));
+                        "Specified memory was not declared or imported in the module '%s'", instance.name());
         final Runnable resolveAction = () -> {
             if (context.getContextOptions().memoryOverheadMode()) {
                 // Do not initialize the data segment when in memory overhead mode.
@@ -766,10 +769,8 @@ public class Linker {
             }
 
             WasmMemoryLibrary memoryLib = WasmMemoryLibrary.getUncached();
-            Assert.assertUnsignedLongLessOrEqual(baseAddress, memoryLib.byteSize(memory), Failure.OUT_OF_BOUNDS_MEMORY_ACCESS);
-            Assert.assertUnsignedLongLessOrEqual(baseAddress + byteLength, memoryLib.byteSize(memory), Failure.OUT_OF_BOUNDS_MEMORY_ACCESS);
             final byte[] bytecode = instance.module().bytecode();
-            memoryLib.initialize(memory, bytecode, bytecodeOffset, baseAddress, byteLength);
+            memoryLib.initialize(memory, null, bytecode, bytecodeOffset, baseAddress, byteLength);
             instance.setDataInstance(dataSegmentId, droppedDataInstanceOffset);
         };
         final ArrayList<Sym> dependencies = new ArrayList<>();
@@ -785,24 +786,11 @@ public class Linker {
         resolutionDag.resolveLater(new DataSym(instance.name(), dataSegmentId), dependencies.toArray(new Sym[0]), resolveAction);
     }
 
-    void resolvePassiveDataSegment(WasmContext context, WasmInstance instance, int dataSegmentId, int bytecodeOffset, int bytecodeLength) {
+    void resolvePassiveDataSegment(WasmContext context, WasmInstance instance, int dataSegmentId, int bytecodeOffset) {
         final Runnable resolveAction = () -> {
             if (context.getContextOptions().memoryOverheadMode()) {
                 // Do not initialize the data segment when in memory overhead mode.
                 return;
-            }
-            if (context.getContextOptions().useUnsafeMemory()) {
-                final byte[] bytecode = instance.module().bytecode();
-                final int length = switch (bytecode[bytecodeOffset] & BytecodeBitEncoding.DATA_SEG_RUNTIME_LENGTH_MASK) {
-                    case BytecodeBitEncoding.DATA_SEG_RUNTIME_LENGTH_INLINE -> 0;
-                    case BytecodeBitEncoding.DATA_SEG_RUNTIME_LENGTH_U8 -> 1;
-                    case BytecodeBitEncoding.DATA_SEG_RUNTIME_LENGTH_U16 -> 2;
-                    case BytecodeBitEncoding.DATA_SEG_RUNTIME_LENGTH_I32 -> 4;
-                    default -> throw CompilerDirectives.shouldNotReachHere();
-                };
-                final long address = NativeDataInstanceUtil.allocateNativeInstance(instance.module().bytecode(),
-                                bytecodeOffset + BytecodeBitEncoding.DATA_SEG_RUNTIME_HEADER_LENGTH + length + BytecodeBitEncoding.DATA_SEG_RUNTIME_UNSAFE_ADDRESS_LENGTH, bytecodeLength);
-                BinaryStreamParser.writeI64(bytecode, bytecodeOffset + BytecodeBitEncoding.DATA_SEG_RUNTIME_HEADER_LENGTH + length, address);
             }
             instance.setDataInstance(dataSegmentId, bytecodeOffset);
         };
@@ -814,9 +802,9 @@ public class Linker {
     }
 
     void resolveTableImport(WasmContext context, WasmInstance instance, ImportDescriptor importDescriptor, int tableIndex, int declaredMinSize, int declaredMaxSize, byte elemType,
-                    Function<ImportDescriptor, Object> imports) {
+                    ImportValueSupplier imports) {
         final Runnable resolveAction = () -> {
-            WasmTable externalTable = lookupImportObject(importDescriptor, imports, WasmTable.class);
+            WasmTable externalTable = lookupImportObject(instance, importDescriptor, imports, WasmTable.class);
             final int tableAddress;
             if (externalTable != null) {
                 assert tableIndex == importDescriptor.targetIndex();
@@ -1104,7 +1092,7 @@ public class Linker {
 
             @Override
             public String toString() {
-                return String.format("(init global %d in %s)", globalIndex, moduleName);
+                return String.format(Locale.ROOT, "(init global %d in %s)", globalIndex, moduleName);
             }
 
             @Override
@@ -1135,7 +1123,8 @@ public class Linker {
 
             @Override
             public String toString() {
-                return String.format("(import func %s from %s into %s at %d)", importDescriptor.memberName(), importDescriptor.moduleName(), moduleName, destinationIndex);
+                return String.format(Locale.ROOT, "(import func %s from %s into %s at %d)",
+                                importDescriptor.memberName(), importDescriptor.moduleName(), moduleName, destinationIndex);
             }
 
             @Override
@@ -1196,7 +1185,7 @@ public class Linker {
 
             @Override
             public String toString() {
-                return String.format("(callsite at %d in %s)", instructionOffset, moduleName);
+                return String.format(Locale.ROOT, "(callsite %d at %d in %s)", controlTableOffset, instructionOffset, moduleName);
             }
 
             @Override
@@ -1224,7 +1213,7 @@ public class Linker {
 
             @Override
             public String toString() {
-                return String.format("(code entry at %d in %s)", functionIndex, moduleName);
+                return String.format(Locale.ROOT, "(code entry at %d in %s)", functionIndex, moduleName);
             }
 
             @Override
@@ -1254,7 +1243,8 @@ public class Linker {
 
             @Override
             public String toString() {
-                return String.format("(import memory %s from %s into %s with index %d)", importDescriptor.memberName(), importDescriptor.moduleName(), moduleName, memoryIndex);
+                return String.format(Locale.ROOT, "(import memory %s from %s into %s with index %d)",
+                                importDescriptor.memberName(), importDescriptor.moduleName(), moduleName, memoryIndex);
             }
 
             @Override
@@ -1310,7 +1300,7 @@ public class Linker {
 
             @Override
             public String toString() {
-                return String.format("(data %d in %s)", dataSegmentId, moduleName);
+                return String.format(Locale.ROOT, "(data %d in %s)", dataSegmentId, moduleName);
             }
 
             @Override
@@ -1394,7 +1384,7 @@ public class Linker {
 
             @Override
             public String toString() {
-                return String.format("(data %d in %s)", elemSegmentId, moduleName);
+                return String.format(Locale.ROOT, "(data %d in %s)", elemSegmentId, moduleName);
             }
 
             @Override

@@ -24,7 +24,6 @@
  */
 package jdk.graal.compiler.options;
 
-import static org.graalvm.nativeimage.ImageInfo.inImageBuildtimeCode;
 import static org.graalvm.nativeimage.ImageInfo.inImageRuntimeCode;
 
 import java.util.ArrayList;
@@ -43,7 +42,7 @@ import org.graalvm.collections.EconomicMap;
 import org.graalvm.collections.EconomicSet;
 import org.graalvm.collections.MapCursor;
 
-import jdk.graal.compiler.debug.GraalError;
+import jdk.graal.compiler.core.common.LibGraalSupport;
 
 /**
  * This class contains methods for parsing Graal options and matching them against a set of
@@ -55,9 +54,7 @@ public class OptionsParser {
      * Info about libgraal options.
      *
      * @param descriptors set of compiler options available in libgraal. These correspond to the
-     *            reachable {@link OptionKey}s discovered during Native Image static analysis. This
-     *            field is only non-null when {@link OptionsParser} is loaded by the
-     *            LibGraalClassLoader.
+     *            reachable {@link OptionKey}s discovered during Native Image static analysis.
      * @param enterpriseOptions {@linkplain OptionKey#getName() names} of enterprise options
      */
     public record LibGraalOptionsInfo(EconomicMap<String, OptionDescriptor> descriptors, Set<String> enterpriseOptions) {
@@ -67,10 +64,9 @@ public class OptionsParser {
     }
 
     /**
-     * Compiler options info available in libgraal. This field is only non-null when
-     * {@link OptionsParser} is loaded by the LibGraalClassLoader.
+     * Compiler options info available in libgraal.
      */
-    private static LibGraalOptionsInfo libgraalOptions;
+    public static final LibGraalOptionsInfo libgraalOptions = LibGraalSupport.inLibGraal() ? LibGraalOptionsInfo.create() : null;
 
     /**
      * Gets an iterable of available {@link OptionDescriptors}.
@@ -80,11 +76,10 @@ public class OptionsParser {
         if (inImageRuntimeCode()) {
             return List.of(new OptionDescriptorsMap(Objects.requireNonNull(libgraalOptions.descriptors, "missing options")));
         }
-        boolean inLibGraal = libgraalOptions != null;
-        if (inLibGraal && inImageBuildtimeCode()) {
+        if (LibGraalSupport.inLibGraal()) {
             /*
-             * Graal code is being run in the context of the LibGraalClassLoader while building
-             * libgraal so use the LibGraalClassLoader to load the OptionDescriptors.
+             * Executing in the context of the libgraal class loader so use it to load the
+             * OptionDescriptors.
              */
             ClassLoader myCL = OptionsParser.class.getClassLoader();
             return ServiceLoader.load(OptionDescriptors.class, myCL);
@@ -97,14 +92,6 @@ public class OptionsParser {
             ClassLoader loader = ClassLoader.getSystemClassLoader();
             return ServiceLoader.load(OptionDescriptors.class, loader);
         }
-    }
-
-    @ExcludeFromJacocoGeneratedReport("only called when building libgraal")
-    public static LibGraalOptionsInfo setLibgraalOptions(LibGraalOptionsInfo info) {
-        GraalError.guarantee(inImageBuildtimeCode(), "Can only set libgraal compiler options when building libgraal");
-        GraalError.guarantee(libgraalOptions == null, "Libgraal compiler options must be set exactly once");
-        OptionsParser.libgraalOptions = info;
-        return info;
     }
 
     /**
@@ -357,6 +344,7 @@ public class OptionsParser {
      * @param toSearch the entries search
      * @param name the name to search for
      * @param matches the collection to which fuzzy matches of {@code name} will be added
+     * @param extractor functor that maps entry to String
      * @return whether any fuzzy matches were found
      */
     public static <T> boolean collectFuzzyMatches(Iterable<T> toSearch, String name, Collection<T> matches, Function<T, String> extractor) {
@@ -373,6 +361,9 @@ public class OptionsParser {
 
     static boolean isEnterpriseOption(OptionDescriptor desc) {
         if (inImageRuntimeCode()) {
+            if (libgraalOptions == null) {
+                return false;
+            }
             return Objects.requireNonNull(libgraalOptions.enterpriseOptions, "missing options").contains(desc.getName());
         }
         Class<?> declaringClass = desc.getDeclaringClass();

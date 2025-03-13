@@ -1069,7 +1069,7 @@ public abstract class AArch64Assembler extends Assembler<CPUFeature> {
         FPCR(0b11, 0b011, 0b0100, 0b0100, 0b000),
         FPSR(0b11, 0b011, 0b0100, 0b0100, 0b001),
         /* Counter-timer Virtual Count register */
-        CNTVCT_EL0(0b11, 0b011, 0b110, 0b0000, 0b010);
+        CNTVCT_EL0(0b11, 0b011, 0b1110, 0b0000, 0b010);
 
         SystemRegister(int op0, int op1, int crn, int crm, int op2) {
             this.op0 = op0;
@@ -2447,6 +2447,21 @@ public abstract class AArch64Assembler extends Assembler<CPUFeature> {
         assert verifySizeAndRegistersRR(size, dst, src);
 
         bitfieldInstruction(BFM, dst, src, r, s, generalFromSize(size));
+    }
+
+    /**
+     * C6.2.30 Bitfield insert.
+     *
+     * @param size register size. Has to be 32 or 64.
+     * @param dst general purpose register. May not be null, stackpointer or zero-register.
+     * @param src general purpose register. May not be null, stackpointer or zero-register.
+     * @param lsb start index of target register to override with bits from src register.
+     * @param width number of bits to copy from src register.
+     */
+    public void bfi(int size, Register dst, Register src, int lsb, int width) {
+        assert verifySizeAndRegistersRR(size, dst, src);
+
+        bfm(size, dst, src, ((size - lsb) & (size - 1)), (width - 1));
     }
 
     /**

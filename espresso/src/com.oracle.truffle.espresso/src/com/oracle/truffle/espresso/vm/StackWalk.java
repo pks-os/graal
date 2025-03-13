@@ -20,7 +20,6 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
 package com.oracle.truffle.espresso.vm;
 
 import java.util.Map;
@@ -42,7 +41,7 @@ import com.oracle.truffle.espresso.meta.Meta;
 import com.oracle.truffle.espresso.nodes.EspressoRootNode;
 import com.oracle.truffle.espresso.runtime.staticobject.StaticObject;
 import com.oracle.truffle.espresso.substitutions.JavaType;
-import com.oracle.truffle.espresso.substitutions.Target_java_lang_invoke_MethodHandleNatives;
+import com.oracle.truffle.espresso.substitutions.standard.Target_java_lang_invoke_MethodHandleNatives;
 
 public final class StackWalk {
     // -1 and 0 are reserved values.

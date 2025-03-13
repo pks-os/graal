@@ -33,16 +33,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
 
-import jdk.graal.compiler.serviceprovider.GraalServices;
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.collections.EconomicSet;
 import org.graalvm.collections.MapCursor;
@@ -137,18 +134,21 @@ import jdk.vm.ci.meta.ResolvedJavaType;
 import jdk.vm.ci.meta.Signature;
 import jdk.vm.ci.meta.SpeculationLog;
 import jdk.vm.ci.meta.UnresolvedJavaType;
+import org.graalvm.nativeimage.Platform;
+import org.graalvm.nativeimage.Platforms;
 
 /**
  * This class performs graph encoding using {@link GraphEncoder} but also converts JVMCI type and
  * method references into a symbolic form that can be resolved at graph decode time using
  * {@link SymbolicJVMCIReference}.
  * <p>
- * An instance of this class only exist when {@link GraalServices#isBuildingLibgraal()} is true.
+ * An instance of this class only exist when building libgraal.
  */
+@Platforms(Platform.HOSTED_ONLY.class)
 public class SymbolicSnippetEncoder {
 
     /**
-     * A mapping from the method substitution method to the original method name. The string key and
+     * A mapping from the method substitution method to the original method name. The keys and
      * values are produced using {@link EncodedSnippets#methodKey(ResolvedJavaMethod)}.
      */
     private final EconomicMap<String, String> originalMethods = EconomicMap.create();
@@ -216,12 +216,6 @@ public class SymbolicSnippetEncoder {
 
     void addDelayedInvocationPluginMethod(ResolvedJavaMethod method) {
         delayedInvocationPluginMethods.add(method);
-    }
-
-    public void clearSnippetParameterNames() {
-        for (SnippetParameterInfo info : snippetParameterInfos.getValues()) {
-            info.clearNames();
-        }
     }
 
     protected class SnippetInlineInvokePlugin implements InlineInvokePlugin {
@@ -462,8 +456,7 @@ public class SymbolicSnippetEncoder {
             for (; i < info.getParameterCount(); i++) {
                 if (info.isConstantParameter(i) || info.isVarargsParameter(i)) {
                     JavaType type = method.getSignature().getParameterType(i - offset, method.getDeclaringClass());
-                    if (type instanceof ResolvedJavaType) {
-                        ResolvedJavaType resolvedJavaType = (ResolvedJavaType) type;
+                    if (type instanceof ResolvedJavaType resolvedJavaType) {
                         if (info.isVarargsParameter(i)) {
                             resolvedJavaType = resolvedJavaType.getElementalType();
                         }
@@ -541,7 +534,7 @@ public class SymbolicSnippetEncoder {
             graphDatas.put(keyString, data);
         }
 
-        // Ensure a few types are available
+        // Ensure a few well known types are available
         lookupSnippetType(GraalHotSpotVMConfig.class);
         lookupSnippetType(NamedLocationIdentity.class);
         lookupSnippetType(SnippetTemplate.EagerSnippetInfo.class);
@@ -971,8 +964,8 @@ public class SymbolicSnippetEncoder {
     }
 
     /**
-     * This horror show of classes exists solely get {@link HotSpotSnippetBytecodeParser} to be used
-     * as the parser for these snippets.
+     * This horror show of classes exists solely to get {@link HotSpotSnippetBytecodeParser} to be
+     * used as the parser for these snippets.
      */
     class HotSpotSnippetReplacementsImpl extends HotSpotReplacementsImpl {
         HotSpotSnippetReplacementsImpl(HotSpotReplacementsImpl replacements, HotSpotProviders providers) {
@@ -1072,7 +1065,7 @@ public class SymbolicSnippetEncoder {
      * {@link ObjectCopier#encode(ObjectCopier.Encoder, Object)}, it must <b>not</b> be
      * {@code final}.
      */
-    private static Map<Class<?>, SnippetResolvedJavaType> snippetTypes = new HashMap<>();
+    private static EconomicMap<Class<?>, SnippetResolvedJavaType> snippetTypes = EconomicMap.create();
 
     private static synchronized SnippetResolvedJavaType lookupSnippetType(Class<?> clazz) {
         SnippetResolvedJavaType type = null;

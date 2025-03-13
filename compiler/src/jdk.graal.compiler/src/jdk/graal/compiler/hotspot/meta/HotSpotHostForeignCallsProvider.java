@@ -140,6 +140,7 @@ import jdk.graal.compiler.replacements.arraycopy.ArrayCopyForeignCalls;
 import jdk.graal.compiler.replacements.nodes.AESNode;
 import jdk.graal.compiler.replacements.nodes.ArrayCompareToForeignCalls;
 import jdk.graal.compiler.replacements.nodes.ArrayCopyWithConversionsForeignCalls;
+import jdk.graal.compiler.replacements.nodes.ArrayFillNode;
 import jdk.graal.compiler.replacements.nodes.ArrayEqualsForeignCalls;
 import jdk.graal.compiler.replacements.nodes.ArrayEqualsWithMaskForeignCalls;
 import jdk.graal.compiler.replacements.nodes.ArrayIndexOfForeignCalls;
@@ -574,7 +575,9 @@ public abstract class HotSpotHostForeignCallsProvider extends HotSpotForeignCall
         linkForeignCall(options, providers, VM_ERROR, c.vmErrorAddress, PREPEND_THREAD);
         linkForeignCall(options, providers, OSR_MIGRATION_END, c.osrMigrationEndAddress, DONT_PREPEND_THREAD);
         linkForeignCall(options, providers, G1WBPRECALL, c.writeBarrierPreAddress, PREPEND_THREAD);
-        linkForeignCall(options, providers, G1WBPOSTCALL, c.writeBarrierPostAddress, PREPEND_THREAD);
+        if (!c.g1LowLatencyPostWriteBarrierSupport) {
+            linkForeignCall(options, providers, G1WBPOSTCALL, c.writeBarrierPostAddress, PREPEND_THREAD);
+        }
         linkForeignCall(options, providers, VALIDATE_OBJECT, c.validateObject, PREPEND_THREAD);
 
         linkForeignCall(options, providers, TEST_DEOPTIMIZE_CALL_INT, c.testDeoptimizeCallInt, PREPEND_THREAD);
@@ -684,6 +687,7 @@ public abstract class HotSpotHostForeignCallsProvider extends HotSpotForeignCall
 
     private void registerSnippetStubs(HotSpotProviders providers, OptionValues options) {
         linkSnippetStubs(providers, options, IntrinsicStubsGen::new, ArrayIndexOfForeignCalls.STUBS);
+        linkSnippetStubs(providers, options, IntrinsicStubsGen::new, ArrayFillNode.STUBS);
         linkSnippetStubs(providers, options, IntrinsicStubsGen::new, ArrayEqualsForeignCalls.STUBS);
         linkSnippetStubs(providers, options, IntrinsicStubsGen::new, ArrayEqualsWithMaskForeignCalls.STUBS);
         linkSnippetStubs(providers, options, IntrinsicStubsGen::new, ArrayCompareToForeignCalls.STUBS);

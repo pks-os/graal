@@ -71,6 +71,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.graalvm.nativeimage.ImageInfo;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.ProcessProperties;
 
@@ -285,6 +286,7 @@ public class NativeImage {
 
     final String oHInspectServerContentPath = oH(PointstoOptions.InspectServerContentPath);
     final String oHDeadlockWatchdogInterval = oH(SubstrateOptions.DeadlockWatchdogInterval);
+    final String oHLayerCreate = oH(SubstrateOptions.LayerCreate);
 
     final Map<String, String> imageBuilderEnvironment = new HashMap<>();
     private final ArrayList<String> imageBuilderArgs = new ArrayList<>();
@@ -646,12 +648,13 @@ public class NativeImage {
          */
         public List<Path> getBuilderModulePath() {
             List<Path> result = new ArrayList<>();
-            // Non-jlinked JDKs need truffle and word, collections, nativeimage on the
-            // module path since they don't have those modules as part of the JDK. Note
-            // that graal-sdk is now obsolete after the split in GR-43819 (#7171)
+            // Non-jlinked JDKs need truffle and word, collections, nativeimage,
+            // nativeimage-libgraal on the module path since they don't have those
+            // modules as part of the JDK. Note that graal-sdk is now obsolete
+            // after the split in GR-43819 (#7171)
             if (libJvmciDir != null) {
                 result.addAll(getJars(libJvmciDir, "enterprise-graal"));
-                result.addAll(getJars(libJvmciDir, "word", "collections", "nativeimage"));
+                result.addAll(getJars(libJvmciDir, "word", "collections", "nativeimage", "nativeimage-libgraal"));
             }
             if (modulePathBuild) {
                 result.addAll(createTruffleBuilderModulePath());
@@ -996,6 +999,8 @@ public class NativeImage {
         addImageBuilderJavaArgs("-Dcom.oracle.graalvm.isaot=true");
         addImageBuilderJavaArgs("-Djava.system.class.loader=" + CUSTOM_SYSTEM_CLASS_LOADER);
 
+        addImageBuilderJavaArgs("-D" + ImageInfo.PROPERTY_IMAGE_CODE_KEY + "=" + ImageInfo.PROPERTY_IMAGE_CODE_VALUE_BUILDTIME);
+
         /*
          * The presence of CDS and custom system class loaders disables the use of archived
          * non-system class and triggers a warning.
@@ -1266,7 +1271,11 @@ public class NativeImage {
         Optional<ArgumentEntry> lastMainClass = getHostedOptionArgument(imageBuilderArgs, oHClass);
         mainClass = lastMainClass.map(ArgumentEntry::value).orElse(null);
         buildExecutable = imageBuilderArgs.stream().noneMatch(arg -> arg.startsWith(oHEnableSharedLibraryFlagPrefix) || arg.startsWith(oHEnableImageLayerFlagPrefix));
-        staticExecutable = imageBuilderArgs.stream().anyMatch(arg -> arg.contains(oHEnableStaticExecutable));
+        boolean staticExecutable = imageBuilderArgs.stream().anyMatch(arg -> arg.contains(oHEnableStaticExecutable));
+        if (useBundle() && bundleSupport.useContainer && staticExecutable) {
+            showMessage(BundleSupport.BUNDLE_INFO_MESSAGE_PREFIX + "Skipping containerized build, not supported for --static.");
+            bundleSupport.useContainer = false;
+        }
         boolean listModules = imageBuilderArgs.stream().anyMatch(arg -> arg.contains(oH + "+" + "ListModules"));
         printFlags |= imageBuilderArgs.stream().anyMatch(arg -> arg.matches("-H:MicroArchitecture(@[^=]*)?=list"));
 
@@ -1336,6 +1345,10 @@ public class NativeImage {
                         imageBuilderArgs.add(oH(SubstrateOptions.Name, "explicit image name") + extraImageName.value);
                     }
                 }
+            }
+
+            if (mainClass != null && !mainClass.isEmpty() && !Character.isJavaIdentifierStart(mainClass.charAt(0))) {
+                showError("'%s' is not a valid mainclass. Specify a valid classname for the class that contains the main method.".formatted(mainClass));
             }
 
             if (!extraImageArgs.isEmpty()) {
@@ -1578,7 +1591,6 @@ public class NativeImage {
     }
 
     boolean buildExecutable;
-    boolean staticExecutable;
     String targetLibC;
     String mainClass;
     String mainClassModule;

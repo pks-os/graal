@@ -61,6 +61,7 @@ import com.oracle.graal.pointsto.meta.AnalysisField;
 import com.oracle.graal.pointsto.meta.AnalysisMethod;
 import com.oracle.graal.pointsto.meta.AnalysisType;
 import com.oracle.graal.pointsto.meta.AnalysisUniverse;
+import com.oracle.svm.core.StaticFieldsSupport;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.configure.ConfigurationConditionResolver;
@@ -76,6 +77,7 @@ import com.oracle.svm.core.jni.access.JNIAccessibleMethod;
 import com.oracle.svm.core.jni.access.JNIAccessibleMethodDescriptor;
 import com.oracle.svm.core.jni.access.JNINativeLinkage;
 import com.oracle.svm.core.jni.access.JNIReflectionDictionary;
+import com.oracle.svm.core.layeredimagesingleton.MultiLayeredImageSingleton;
 import com.oracle.svm.core.meta.MethodPointer;
 import com.oracle.svm.core.option.HostedOptionKey;
 import com.oracle.svm.core.util.UserError;
@@ -485,7 +487,8 @@ public class JNIAccessFeature implements Feature {
             wrappers.forEach(wrapper -> {
                 AnalysisMethod analysisWrapper = access.getUniverse().lookup(wrapper);
                 access.getBigBang().addRootMethod(analysisWrapper, true, "Registerd in " + JNIAccessFeature.class);
-                analysisWrapper.registerAsEntryPoint(unpublished); // ensures C calling convention
+                /* ensures C calling convention */
+                analysisWrapper.registerAsNativeEntryPoint(unpublished);
             });
             return new JNIJavaCallVariantWrapperGroup(varargs, array, valist);
         });
@@ -511,6 +514,7 @@ public class JNIAccessFeature implements Feature {
         } else if (field.isStatic() && field.isFinal()) {
             MaterializedConstantFields.singleton().register(field);
         }
+        StaticFieldsSupport.StaticFieldValidator.checkFieldOffsetAllowed(field);
 
         BigBang bb = access.getBigBang();
         bb.registerAsJNIAccessed(field, writable);
@@ -700,6 +704,7 @@ public class JNIAccessFeature implements Feature {
     private static void finishFieldBeforeCompilation(String name, JNIAccessibleField field, CompilationAccessImpl access, DynamicHubLayout dynamicHubLayout) {
         try {
             int offset = -1;
+            int layerNumber = MultiLayeredImageSingleton.UNUSED_LAYER_NUMBER;
             EconomicSet<Class<?>> hidingSubclasses = null;
             if (!field.isNegativeHosted()) {
                 Class<?> declaringClass = field.getDeclaringClass().getClassObject();
@@ -716,11 +721,14 @@ public class JNIAccessFeature implements Feature {
                 } else {
                     assert hField.hasLocation();
                     offset = hField.getLocation();
+                    if (hField.isStatic()) {
+                        layerNumber = hField.getInstalledLayerNum();
+                    }
                 }
                 hidingSubclasses = findHidingSubclasses(hField.getDeclaringClass(), sub -> anyFieldMatches(sub, name));
             }
 
-            field.finishBeforeCompilation(offset, hidingSubclasses);
+            field.finishBeforeCompilation(offset, layerNumber, hidingSubclasses);
 
         } catch (NoSuchFieldException e) {
             throw new RuntimeException(e);

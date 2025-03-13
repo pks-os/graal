@@ -69,32 +69,39 @@ It outputs the SBOM in the following format:
 }
 ```
 
-## Vulnerability Scanning
+## Enabling Security Scanning
 
-To scan for vulnerable libraries, use either the [GraalVM GitHub Action](https://github.com/marketplace/actions/github-action-for-graalvm) for automated scanning, or submit the SBOM to a vulnerability scanner directly.
+You can leverage the generated SBOM to integrate with security scanning solutions.
+There are a variety of tools to help detect and mitigate security vulnerabilities in your application dependencies.
 
-### GitHub Integration
+One example is [Application Dependency Management (ADM)](https://docs.oracle.com/iaas/Content/application-dependency-management/concepts/adm_overview.htm){:target="_blank"} from Oracle.
+When submitting your SBOM to the ADM vulnerability scanner, it identifies application dependencies and flags those containing known security vulnerabilities.
+ADM relies on vulnerability reports from community sources, including the National Vulnerability Database (NVD).
+It also integrates with GitHub Actions, GitLab, and Jenkins Pipelines.
 
-When using the [GraalVM GitHub Action](https://github.com/marketplace/actions/github-action-for-graalvm), the SBOM can be automatically generated and submitted to GitHub's dependency submission API for continuous scanning. 
-This enables: 
-- Vulnerability tracking with GitHub's Dependabot.
-- Dependency tracking with GitHub's Dependency Graph.
-
-If you use GitHub, this integration offers you the simplest setup and powerful security tooling.
-
-### Command-Line Scanning 
-
-The popular [Anchore software supply chain management platform](https://anchore.com/) makes the `grype` scanner available for free.
-You can check whether the libraries given in your SBOMs have known vulnerabilities documented in Anchore's database.
-For this purpose, the output of the tool can be fed directly to the `grype` scanner to check for vulnerable libraries, using the command `$JAVA_HOME/bin/native-image-inspect --sbom <path_to_binary> | grype` which produces the following output:
+Another popular command-line scanner is `grype`, part of the [Anchore software supply chain management platform](https://anchore.com/){:target="_blank"}.
+With `grype`, you can check whether the libraries listed in your SBOMs have known vulnerabilities documented in Anchore's database.
+The output of the `native-image-inspect` tool can be fed directly into `grype` to scan for vulnerable libraries using the following command:
+```bash
+$JAVA_HOME/bin/native-image-inspect --sbom <path_to_binary> | grype
+```
+It produces the following output:
 ```shell
 NAME                 INSTALLED      VULNERABILITY   SEVERITY
 netty-codec-http2    4.1.76.Final   CVE-2022-24823  Medium
 ```
 
-You can then use this report to update any vulnerable dependencies found in your executable.
+The generated report can then be used to update any vulnerable dependencies in your executable.
 
-> Note: Running `native-image-inspect` without `--sbom` executes code from the native binary to extract class information. **Do not use it on untrusted binaries.** This extraction method is deprecated—use [class-level SBOMs](#including-class-level-metadata-in-the-sbom) instead.
+### Automated Scanning
+
+Integrating security scanning into your CI/CD workflows has never been easier.
+With SBOM support available in the [GraalVM GitHub Action](https://github.com/marketplace/actions/github-action-for-graalvm){:target="_blank"}, your generated SBOM can be automatically submitted and analyzed using [GitHub’s dependency submission API](https://docs.github.com/en/rest/dependency-graph/dependency-submission){:target="_blank"}.
+It enables: 
+- Vulnerability tracking with GitHub's Dependabot.
+- Dependency tracking with GitHub's Dependency Graph.
+
+This integration helps ensure that your application is continuously monitored for vulnerabilities throughout the development lifecycle.
 
 ## Dependency Tree
 
@@ -105,16 +112,13 @@ For example, discovering an unexpected component in the SBOM allows for tracing 
 
 With the GraalVM GitHub Action, you get access to GitHub's Dependency Graph feature.
 
-## Enhanced SBOMs with Maven Plugin for Native Image
+## More Accurate SBOMs with Maven
 
-To generate more accurate SBOMs with richer component metadata, consider using the [Maven plugin for GraalVM Native Image](https://graalvm.github.io/native-build-tools/latest/maven-plugin.html).
-This plugin integrates with Native Image to enhance the SBOM creation.
+To generate more accurate SBOMs, consider using the [Maven plugin for GraalVM Native Image](https://graalvm.github.io/native-build-tools/latest/maven-plugin.html).
+This plugin integrates with Native Image to improve the SBOM creation.
 
 The plugin creates a "baseline" SBOM by using the `cyclonedx-maven-plugin`.
-This baseline SBOM includes additional metadata that otherwise is not available to the native-image generator, such as `licenses`, `externalReferences`, `hashes`, and `copyright`.
-See the [CycloneDX specification](https://cyclonedx.org/docs/1.5/json/#components) for more information about the fields.
-
-The baseline SBOM also defines which package names belong to a component, helping Native Image associate classes with their respective components—a task that can be challenging when shading or fat JARs are used.
+The baseline SBOM defines which package names belong to a component, helping Native Image associate classes with their respective components—a task that can be challenging for the `native-image` tool when shading or fat JARs are used.
 In this collaborative approach, Native Image is also able to prune components and dependencies more aggressively to produce a minimal SBOM.
 
 These enhancements are available starting with plugin version 0.10.4 and are enabled by default when the `--enable-sbom` option is used.
@@ -131,7 +135,7 @@ This information can be useful for:
 
 ### Data Format
 
-The [CycloneDX specification](https://cyclonedx.org/docs/1.5/json/) allows the use of a hierarchical representation by nesting components that have a parent-child relationship.
+The [CycloneDX specification](https://cyclonedx.org/docs/1.5/json/){:target="_blank"} allows the use of a hierarchical representation by nesting components that have a parent-child relationship.
 It is used to embed class-level information in SBOM components in the following way:
 ```
 [component] SBOM Component

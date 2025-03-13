@@ -190,6 +190,7 @@ import jdk.graal.compiler.nodes.virtual.EnsureVirtualizedNode;
 import jdk.graal.compiler.replacements.nodes.AESNode;
 import jdk.graal.compiler.replacements.nodes.AESNode.CryptMode;
 import jdk.graal.compiler.replacements.nodes.ArrayEqualsNode;
+import jdk.graal.compiler.replacements.nodes.ArrayFillNode;
 import jdk.graal.compiler.replacements.nodes.BigIntegerMulAddNode;
 import jdk.graal.compiler.replacements.nodes.BigIntegerMultiplyToLenNode;
 import jdk.graal.compiler.replacements.nodes.BigIntegerSquareToLenNode;
@@ -280,7 +281,7 @@ public class StandardGraphBuilderPlugins {
         registerThreadPlugins(plugins, replacements);
 
         if (supportsStubBasedPlugins) {
-            registerArraysPlugins(plugins, replacements);
+            registerArraysPlugins(plugins, replacements, lowerer.getTarget().arch);
             registerAESPlugins(plugins, replacements, lowerer.getTarget().arch);
             registerGHASHPlugin(plugins, replacements, lowerer.getTarget().arch);
             registerBigIntegerPlugins(plugins, replacements);
@@ -290,7 +291,7 @@ public class StandardGraphBuilderPlugins {
     }
 
     public static final Field STRING_VALUE_FIELD;
-    private static final Field STRING_CODER_FIELD;
+    public static final Field STRING_CODER_FIELD;
 
     static {
         Field coder = null;
@@ -416,12 +417,41 @@ public class StandardGraphBuilderPlugins {
         });
     }
 
+    public static class ArrayFillInvocationPlugin extends InvocationPlugin {
+        private final JavaKind kind;
+
+        public ArrayFillInvocationPlugin(JavaKind kind, Type... argumentTypes) {
+            super("fill", argumentTypes);
+            this.kind = kind;
+        }
+
+        @SuppressWarnings("try")
+        @Override
+        public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode array, ValueNode value) {
+            ConstantNode arrayBaseOffset = ConstantNode.forLong(b.getMetaAccess().getArrayBaseOffset(this.kind), b.getGraph());
+            ValueNode nonNullArray = b.nullCheckedValue(array, DeoptimizationAction.None);
+            ValueNode arrayLength = b.add(new ArrayLengthNode(nonNullArray));
+            ValueNode castedValue = value;
+            if (this.kind == JavaKind.Float) {
+                castedValue = ReinterpretNode.create(JavaKind.Int, value, NodeView.DEFAULT);
+            } else if (this.kind == JavaKind.Double) {
+                castedValue = ReinterpretNode.create(JavaKind.Long, value, NodeView.DEFAULT);
+            }
+            b.add(new ArrayFillNode(nonNullArray, arrayBaseOffset, arrayLength, castedValue, this.kind));
+            return true;
+        }
+    }
+
     public static class ArrayEqualsInvocationPlugin extends InvocationPlugin {
         private final JavaKind kind;
 
         public ArrayEqualsInvocationPlugin(JavaKind kind, Type... argumentTypes) {
             super("equals", argumentTypes);
             this.kind = kind;
+        }
+
+        public JavaKind getKind() {
+            return kind;
         }
 
         @SuppressWarnings("try")
@@ -448,9 +478,9 @@ public class StandardGraphBuilderPlugins {
         }
     }
 
-    static class StringEqualsInvocationPlugin extends InvocationPlugin {
+    public static class StringEqualsInvocationPlugin extends InvocationPlugin {
 
-        StringEqualsInvocationPlugin() {
+        public StringEqualsInvocationPlugin() {
             super("equals", Receiver.class, Object.class);
         }
 
@@ -501,7 +531,7 @@ public class StandardGraphBuilderPlugins {
         }
     }
 
-    private static void registerArraysPlugins(InvocationPlugins plugins, Replacements replacements) {
+    private static void registerArraysPlugins(InvocationPlugins plugins, Replacements replacements, Architecture arch) {
         Registration r = new Registration(plugins, Arrays.class, replacements);
         r.register(new ArrayEqualsInvocationPlugin(JavaKind.Boolean, boolean[].class, boolean[].class));
         r.register(new ArrayEqualsInvocationPlugin(JavaKind.Byte, byte[].class, byte[].class));
@@ -509,6 +539,15 @@ public class StandardGraphBuilderPlugins {
         r.register(new ArrayEqualsInvocationPlugin(JavaKind.Char, char[].class, char[].class));
         r.register(new ArrayEqualsInvocationPlugin(JavaKind.Int, int[].class, int[].class));
         r.register(new ArrayEqualsInvocationPlugin(JavaKind.Long, long[].class, long[].class));
+
+        r.registerConditional(ArrayFillNode.isSupported(arch), new ArrayFillInvocationPlugin(JavaKind.Boolean, boolean[].class, boolean.class));
+        r.registerConditional(ArrayFillNode.isSupported(arch), new ArrayFillInvocationPlugin(JavaKind.Byte, byte[].class, byte.class));
+        r.registerConditional(ArrayFillNode.isSupported(arch), new ArrayFillInvocationPlugin(JavaKind.Char, char[].class, char.class));
+        r.registerConditional(ArrayFillNode.isSupported(arch), new ArrayFillInvocationPlugin(JavaKind.Short, short[].class, short.class));
+        r.registerConditional(ArrayFillNode.isSupported(arch), new ArrayFillInvocationPlugin(JavaKind.Int, int[].class, int.class));
+        r.registerConditional(ArrayFillNode.isSupported(arch), new ArrayFillInvocationPlugin(JavaKind.Float, float[].class, float.class));
+        r.registerConditional(ArrayFillNode.isSupported(arch), new ArrayFillInvocationPlugin(JavaKind.Long, long[].class, long.class));
+        r.registerConditional(ArrayFillNode.isSupported(arch), new ArrayFillInvocationPlugin(JavaKind.Double, double[].class, double.class));
     }
 
     private static void registerArrayPlugins(InvocationPlugins plugins, Replacements replacements) {
@@ -812,8 +851,15 @@ public class StandardGraphBuilderPlugins {
             if (arrayType != null && arrayType.isArray()) {
                 unsafe.get(true);
                 var elementKind = b.getMetaAccessExtensionProvider().getStorageKind(arrayType.getComponentType());
-                int result = arrayBaseOffset ? b.getMetaAccess().getArrayBaseOffset(elementKind) : b.getMetaAccess().getArrayIndexScale(elementKind);
-                b.addPush(JavaKind.Int, ConstantNode.forInt(result));
+                if (arrayBaseOffset) {
+                    if (JavaVersionUtil.JAVA_SPEC > 21) {
+                        b.addPush(JavaKind.Long, ConstantNode.forLong(b.getMetaAccess().getArrayBaseOffset(elementKind)));
+                    } else {
+                        b.addPush(JavaKind.Int, ConstantNode.forInt(b.getMetaAccess().getArrayBaseOffset(elementKind)));
+                    }
+                } else {
+                    b.addPush(JavaKind.Int, ConstantNode.forInt(b.getMetaAccess().getArrayIndexScale(elementKind)));
+                }
                 return true;
             }
         }
@@ -1345,14 +1391,16 @@ public class StandardGraphBuilderPlugins {
                 return true;
             }
         });
-        r.register(new InvocationPlugin("isArray", Receiver.class) {
-            @Override
-            public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver) {
-                LogicNode isArray = b.add(ClassIsArrayNode.create(b.getConstantReflection(), receiver.get(true)));
-                b.addPush(JavaKind.Boolean, ConditionalNode.create(isArray, NodeView.DEFAULT));
-                return true;
-            }
-        });
+        if (JavaVersionUtil.JAVA_SPEC == 21) {
+            r.register(new InvocationPlugin("isArray", Receiver.class) {
+                @Override
+                public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver) {
+                    LogicNode isArray = b.add(ClassIsArrayNode.create(b.getConstantReflection(), receiver.get(true)));
+                    b.addPush(JavaKind.Boolean, ConditionalNode.create(isArray, NodeView.DEFAULT));
+                    return true;
+                }
+            });
+        }
         r.register(new InvocationPlugin("cast", Receiver.class, Object.class) {
             @Override
             public boolean apply(GraphBuilderContext b, ResolvedJavaMethod targetMethod, Receiver receiver, ValueNode object) {
@@ -2372,8 +2420,9 @@ public class StandardGraphBuilderPlugins {
             ResolvedJavaField embeddedCipherField = helper.getField(receiverType, "embeddedCipher");
             ValueNode embeddedCipher = b.nullCheckedValue(helper.loadField(receiver, embeddedCipherField));
             LogicNode typeCheck = InstanceOfNode.create(TypeReference.create(b.getAssumptions(), typeAESCrypt), embeddedCipher);
-            helper.doFallbackIfNot(typeCheck, GraalDirectives.UNLIKELY_PROBABILITY);
-            return readFieldArrayStart(b, helper, typeAESCrypt, "K", embeddedCipher, JavaKind.Int);
+            GuardingNode guard = helper.doFallbackIfNot(typeCheck, GraalDirectives.UNLIKELY_PROBABILITY);
+            ValueNode cast = b.add(PiNode.create(embeddedCipher, StampFactory.objectNonNull(TypeReference.create(b.getAssumptions(), typeAESCrypt)), guard.asNode()));
+            return readFieldArrayStart(b, helper, typeAESCrypt, "K", cast, JavaKind.Int);
         }
     }
 
